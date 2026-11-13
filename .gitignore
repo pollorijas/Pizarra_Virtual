@@ -1,0 +1,33 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+.venv/
+venv/
+env/
+.python-version
+
+# --- PyInstaller ---
+# (PizarraVirtual.spec SÍ se versiona; solo se ignoran las salidas de compilación)
+build/
+dist/
+*.manifest
+warn-*.txt
+xref-*.html
+
+# --- Pruebas / herramientas ---
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# --- Editores y sistema ---
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+Desktop.ini
+.DS_Store
