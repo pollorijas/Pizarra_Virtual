@@ -36,14 +36,14 @@ jobs:
         shell: pwsh
         run: |
           $tag = "${{ inputs.version || github.ref_name }}"
-          if ($tag -notmatch '^v(\d+\.\d+\.\d+)$') { throw "La versión debe tener la forma vX.Y.Z (recibido: $tag)" }
+          if ($tag -notmatch '^v(\d+\.\d+\.\d+)$') { throw "La versión debe tener la forma vX.Y.Z (recibido: ${tag})" }
           $ver = $Matches[1]
           $code = (Select-String -Path pizarra_virtual/__init__.py -Pattern '__version__ = "(.+)"').Matches[0].Groups[1].Value
-          if ($code -ne $ver) { throw "pizarra_virtual/__init__.py dice $code pero se quiere publicar $ver" }
-          if (-not (Select-String -Path version_info.txt -SimpleMatch "'$ver.0'" -Quiet)) { throw "version_info.txt no está en $ver" }
-          if (-not (Test-Path "notas/$tag.md")) { throw "Faltan las notas de la release: notas/$tag.md" }
-          if (-not (Select-String -Path CHANGELOG.md -SimpleMatch "## [$ver]" -Quiet)) { throw "CHANGELOG.md no tiene la sección ## [$ver]" }
-          Write-Host "Versión $ver: código, notas y CHANGELOG coinciden"
+          if ($code -ne $ver) { throw "pizarra_virtual/__init__.py dice ${code} pero se quiere publicar ${ver}" }
+          if (-not (Select-String -Path version_info.txt -SimpleMatch "'${ver}.0'" -Quiet)) { throw "version_info.txt no está en ${ver}" }
+          if (-not (Test-Path "notas/${tag}.md")) { throw "Faltan las notas de la release: notas/${tag}.md" }
+          if (-not (Select-String -Path CHANGELOG.md -SimpleMatch "## [${ver}]" -Quiet)) { throw "CHANGELOG.md no tiene la sección ## [${ver}]" }
+          Write-Host "Versión ${ver}: código, notas y CHANGELOG coinciden"
 
       - name: Instalar dependencias
         run: |
