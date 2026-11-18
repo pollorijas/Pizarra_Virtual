@@ -371,9 +371,20 @@ class Controller(QObject):
         self.drawing = on
         for ov in self.overlays.values():
             ov.apply_input_mode()
-        if on:
-            self._raise_toolbar(activate=True)
+        # Cambiar el modo de entrada puede reordenar las ventanas «siempre encima» y dejar
+        # la barra debajo de la hoja: se vuelve a subir ahora y tras procesar ese cambio.
+        self._raise_toolbar(activate=on)
+        QTimer.singleShot(0, self._keep_toolbar_on_top)
         self._changed(repaint=True)
+
+    def _keep_toolbar_on_top(self) -> None:
+        if not self._shutting_down and self.toolbar.isVisible():
+            self.toolbar.raise_()
+
+    @property
+    def sheet_visible(self) -> bool:
+        """La hoja de fondo (color y pauta) solo se muestra en modo «Dibujando»."""
+        return self.drawing
 
     def toggle_drawing(self) -> None:
         self.set_drawing(not self.drawing or not self.visible)
@@ -838,9 +849,11 @@ class Controller(QObject):
                 else:
                     shot = capture.grab_screen(s)
                     if with_drawing:
+                        sheet = self.sheet_visible  # lo mismo que se ve en pantalla
                         shot = capture.compose_drawing(shot, ov.canvas if ov else None,
-                                                       self.background_color(interactive=False),
-                                                       ov.pattern_image() if ov else None)
+                                                       self.background_color(interactive=False) if sheet
+                                                       else QColor(0, 0, 0, 0),
+                                                       ov.pattern_image() if ov and sheet else None)
                 parts.append((s.geometry(), shot))
             img = capture.stitch(parts)
             path = capture.save_capture(img)

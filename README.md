@@ -49,7 +49,7 @@ el **Manual de usuario** en PDF.
 | **Texto** | Tecla **T**: clic donde quieras y escribe con el teclado (tildes, ñ, varias líneas, Ctrl+V para pegar). Tamaño de letra, color y **negrita**. Mientras escribes, las teclas no activan atajos. Esc o un clic fuera termina el texto. |
 | **Puntero láser / tinta temporal** | Tecla **L**: el cursor se convierte en un punto luminoso; al arrastrar deja un trazo brillante que **se desvanece solo** (no se guarda). |
 | **Fondo** | Transparente, «Oscurecer escritorio», «Pizarra blanca» o «Pizarra verde» (para usarla como pizarra tradicional). |
-| **Pautas** | **Cuadrícula**, **hoja rayada**, **pauta de caligrafía** (4 líneas), **plano cartesiano** con ejes numerados y **pentagrama**, sobre cualquier fondo. Se incluyen en capturas y PDF. |
+| **Pautas** | **Cuadrícula**, **hoja rayada**, **pauta de caligrafía** (4 líneas), **plano cartesiano** con ejes numerados y **pentagrama**, sobre cualquier fondo. Se incluyen en capturas y PDF. En «Ratón libre» la hoja (fondo y pauta) se aparta para poder usar el equipo y vuelve al pasar a «Dibujando». |
 | **Foco** | **F** / **Ctrl+Alt+F**: oscurece la pantalla salvo un círculo alrededor del cursor (**Alt + rueda** para su tamaño). Funciona también en «Ratón libre», sobre otros programas. |
 | **Cortina** | **V**: tapa la pantalla y se descubre poco a poco arrastrándola o con **↓ / ↑** (preguntas antes que respuestas, textos párrafo a párrafo). |
 | **Resaltar cursor y clics** | **M** / **Ctrl+Alt+M**: halo amarillo alrededor del puntero y una onda en cada clic (roja izquierdo, azul derecho), también al hacer clic en otros programas. |

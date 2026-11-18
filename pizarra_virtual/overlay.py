@@ -395,10 +395,13 @@ class Overlay(QWidget):
         if self.zoom_active:
             self._paint_zoomed(p, QRectF(ev.rect()), True, hint=False)
         else:
+            # En «Ratón libre» la hoja (fondo y pauta) se aparta para poder usar el equipo:
+            # solo quedan los trazos encima del escritorio. Vuelve al pasar a «Dibujando».
+            sheet = self.ctrl.sheet_visible
             p.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
-            p.fillRect(ev.rect(), self.ctrl.background_color(interactive=self.ctrl.drawing))
+            p.fillRect(ev.rect(), self.ctrl.background_color(interactive=True) if sheet else QColor(0, 0, 0, 0))
             p.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
-            pattern = self.pattern_image()
+            pattern = self.pattern_image() if sheet else None
             if pattern is not None:
                 p.drawImage(QPointF(0, 0), pattern)
             self._draw_drawing(p)

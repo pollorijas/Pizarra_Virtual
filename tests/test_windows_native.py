@@ -379,3 +379,47 @@ def test_native_real_alt_f4_removes_the_sheet_from_the_desktop(ctrl, qapp, monke
     assert not user32.IsWindowVisible(ov_hwnd) and not user32.IsWindowVisible(tb_hwnd)
     after = _grab("hoja_despues_alt_f4.png").getpixel(point)
     assert after != before, (before, after)  # vuelve a verse el escritorio
+
+
+def test_native_mouse_mode_with_cartesian_sheet_can_return(ctrl, qapp):
+    """Hoja blanca + plano cartesiano → «Ratón libre» con un clic real: debe verse el
+    escritorio, la barra debe quedar encima (según Windows) y se debe poder volver."""
+    import ctypes
+    from ctypes import wintypes
+
+    _, _, user32 = _win32()
+    user32.WindowFromPoint.argtypes = [wintypes.POINT]
+    user32.WindowFromPoint.restype = wintypes.HWND
+    user32.GetAncestor.argtypes = [wintypes.HWND, ctypes.c_uint]
+    user32.GetAncestor.restype = wintypes.HWND
+    ov = _overlay(ctrl)
+    tb = ctrl.toolbar
+    dpr = ov.devicePixelRatioF()
+    ctrl.set_background("white")
+    ctrl.set_pattern("cartesian")
+    ctrl.set_drawing(True)
+    _settle(qapp, 500)
+    point = (round(min(ov.width() - 20, 900) * dpr), round(min(ov.height() - 20, 500) * dpr))
+    sheet = _grab("cartesiano_dibujando.png").getpixel(point)
+    assert min(sheet[:3]) > 200
+
+    def top_window_at(widget):
+        c = widget.mapToGlobal(widget.rect().center())
+        hwnd = user32.WindowFromPoint(wintypes.POINT(round(c.x() * dpr), round(c.y() * dpr)))
+        return int(user32.GetAncestor(hwnd, 2) or 0)  # GA_ROOT
+
+    def click(widget):
+        c = widget.mapToGlobal(widget.rect().center())
+        _real_mouse(qapp, [(c.x(), c.y()), (c.x(), c.y())], dpr)
+
+    for cycle in range(2):
+        click(tb.mode_btn)  # → «Ratón libre»
+        _settle(qapp, 400)
+        assert not ctrl.drawing, cycle
+        free = _grab(f"cartesiano_raton_libre_{cycle}.png").getpixel(point)
+        assert free != sheet, (cycle, sheet, free)  # se ve el escritorio, no la hoja
+        assert top_window_at(tb.mode_btn) == int(tb.winId()), cycle  # la barra está encima de la hoja
+        click(tb.mode_btn)  # → «Dibujando»: se puede volver
+        _settle(qapp, 400)
+        assert ctrl.drawing, cycle
+        assert _grab(f"cartesiano_vuelta_{cycle}.png").getpixel(point) == sheet, cycle
