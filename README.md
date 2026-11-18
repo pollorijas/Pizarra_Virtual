@@ -71,6 +71,8 @@ En la página de **[Releases](https://github.com/pollorijas/Pizarra_Virtual/rele
 - `PizarraVirtual.exe` — la aplicación (un único archivo, sin instalación).
 - `Manual de usuario.pdf` — guía completa de uso.
 
+Los cambios de cada versión están en el **[registro de cambios (CHANGELOG.md)](CHANGELOG.md)**.
+
 Además, cada vez que se sube código a `main`, **GitHub Actions** compila, prueba y empaqueta la versión
 en desarrollo: en la pestaña **Actions → «Compilar PizarraVirtual.exe»**, la ejecución más reciente
 tiene el artefacto **`PizarraVirtual`** con el mismo `.zip`.
@@ -243,21 +245,29 @@ dist\PizarraVirtual.exe --selftest
 
 El flujo [`.github/workflows/build.yml`](.github/workflows/build.yml) hace lo mismo en `windows-latest`
 en cada push a `main`, en cada pull request y bajo demanda (*Run workflow*). Para publicar una
-versión con el `.exe` adjunto, crea primero sus notas en `notas/vX.Y.Z.md` (se usan como texto de la
-release; ver [`notas/v1.1.0.md`](notas/v1.1.0.md)), súbelas y después crea y sube la etiqueta:
+versión, primero:
+
+1. sube el número en `pizarra_virtual/__init__.py` y `version_info.txt`;
+2. añade su sección `## [X.Y.Z] - fecha` al principio de [`CHANGELOG.md`](CHANGELOG.md) (registro de
+   cambios de todas las versiones);
+3. escribe sus notas en `notas/vX.Y.Z.md` (texto de la release; ver
+   [`notas/v1.2.1.md`](notas/v1.2.1.md)).
+
+El flujo comprueba esos tres puntos y no publica si falta alguno. Súbelos y después crea y sube la
+etiqueta:
 
 ```bash
-git tag v1.2.0
+git tag v1.2.1
 ```
 
 ```bash
-git push origin v1.2.0
+git push origin v1.2.1
 ```
 
 También se puede publicar sin crear la etiqueta a mano: en **Actions → Compilar PizarraVirtual.exe →
-Run workflow**, escribe la versión (p. ej. `v1.2.0`) en el campo *version*; el flujo crea la etiqueta
+Run workflow**, escribe la versión (p. ej. `v1.2.1`) en el campo *version* (y marca *borrar_anteriores* para dejar solo esa); el flujo crea la etiqueta
 sobre ese commit. En ambos casos vuelve a pasar todas las pruebas y, solo si todo va bien, publica la
-release con `PizarraVirtual.exe`.
+release con el `.zip` (ejecutable + manual).
 
 > PyInstaller no compila de forma cruzada: el `.exe` de Windows debe generarse en Windows (en tu PC o
 > en el runner de GitHub Actions).
@@ -368,6 +378,7 @@ Pizarra_Virtual/
 ├── tools/build_manual.py         # Genera «Manual de usuario.pdf» desde docs/manual.html
 ├── docs/manual.html              # Texto del manual de usuario
 ├── notas/                        # Notas de cada versión publicada (texto de la release)
+├── CHANGELOG.md                  # Registro de cambios de todas las versiones
 ├── pizarra_virtual/
 │   ├── main.py                   # Arranque: DPI, instancia única, registro de errores
 │   ├── app.py                    # Controlador: estado, páginas, modos, efectos, sesiones, capturas, atajos
