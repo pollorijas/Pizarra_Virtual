@@ -296,6 +296,9 @@ identificador de aplicación para la barra de tareas y un refuerzo del estilo *c
   resolución sin perder calidad.
 - **Conexión y desconexión de monitores** en caliente: se crean o eliminan las superposiciones
   automáticamente.
+- **Barra adaptable**: si la barra no cabe a lo alto de la pantalla (por ejemplo, un portátil de
+  1366×768 con escalado al 125–150 %), se coloca automáticamente en **dos columnas**; al llevarla a
+  otro monitor se vuelve a calcular. Su cabecera nunca queda fuera de la pantalla.
 - El factor de escala no se redondea (`PassThrough`), para que 125 %, 150 % o 175 % coincidan píxel a
   píxel con la pantalla.
 - Las capturas usan los píxeles físicos de cada monitor; «Todas las pantallas» las une en una sola
