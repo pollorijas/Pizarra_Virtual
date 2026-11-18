@@ -209,15 +209,19 @@ dist\PizarraVirtual.exe --selftest
 
 El flujo [`.github/workflows/build.yml`](.github/workflows/build.yml) hace lo mismo en `windows-latest`
 en cada push a `main`, en cada pull request y bajo demanda (*Run workflow*). Para publicar una
-versión con el `.exe` adjunto:
+versión con el `.exe` adjunto, crea primero sus notas en `notas/vX.Y.Z.md` (se usan como texto de la
+release; ver [`notas/v1.1.0.md`](notas/v1.1.0.md)), súbelas y después crea y sube la etiqueta:
 
 ```bash
-git tag v1.0.0
+git tag v1.2.0
 ```
 
 ```bash
-git push origin v1.0.0
+git push origin v1.2.0
 ```
+
+El flujo vuelve a pasar todas las pruebas y, solo si todo va bien, publica la release con
+`PizarraVirtual.exe`.
 
 > PyInstaller no compila de forma cruzada: el `.exe` de Windows debe generarse en Windows (en tu PC o
 > en el runner de GitHub Actions).

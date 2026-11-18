@@ -70,5 +70,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
+          name: Pizarra Virtual ${{ github.ref_name }}
+          body_path: notas/${{ github.ref_name }}.md
           files: dist/PizarraVirtual.exe
           generate_release_notes: true
