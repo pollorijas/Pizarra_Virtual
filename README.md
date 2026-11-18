@@ -36,12 +36,13 @@ Se distribuye como un único ejecutable **`PizarraVirtual.exe`** que no necesita
 | **Lienzo sobre el escritorio** | Ventana transparente, siempre visible y sin bordes que cubre cada monitor. Se activa y desactiva con **Ctrl+Alt+D** o con el botón **Dibujando / Ratón libre** de la barra. En «Ratón libre» los dibujos siguen visibles pero los clics llegan a las ventanas de debajo. **Ctrl+Alt+H** oculta o muestra la pizarra. |
 | **Pincel** | Tamaño ajustable (1–150 px) y cuatro tipos: **Duro** (borde nítido), **Suave** (bordes difuminados), **Aerógrafo** (spray) y **Caligráfico** (punta plana inclinada). |
 | **Lápiz** | Trazo fino (1–8 px) con tamaño ajustable. |
-| **Pluma** | Grosor variable que imita una pluma real. Con una **tableta o lápiz con sensor de presión** (Wacom, Surface Pen, Windows Ink…) usa la presión real; **sin tableta, la presión se simula con la velocidad del trazo**: despacio = trazo grueso, rápido = trazo fino. |
+| **Pluma** | Trazo preciso que imita una pluma estilográfica: curva suave con bordes limpios, **estabilizador** que elimina el temblor del ratón, **entrada y salida afinadas** y final exacto donde se suelta. Con una **tableta o lápiz con sensor de presión** (Wacom, Surface Pen, Windows Ink…) usa la presión real; **sin tableta, la presión se simula con la velocidad del trazo** (despacio = trazo pleno, rápido = más fino, con cambios graduales). El grosor también varía ligeramente con la dirección, como un plumín inclinado. |
 | **Destacador** | Trazo ancho y semitransparente (40 % por defecto) con punta biselada, pensado para resaltar texto. No se oscurece al repasar dentro del mismo trazo. |
 | **Goma de borrar** | Borra píxeles de los trazos con tamaño ajustable (4–250 px). Con un lápiz de tableta, el extremo «goma» del lápiz borra automáticamente. |
 | **Figuras** | **Rectángulo/cuadrado**, **elipse/círculo**, **triángulo**, **línea** y **flecha**, dibujadas arrastrando el cursor. Con **Mayús** se fuerzan proporciones iguales (cuadrado, círculo) o ángulos de 15° (líneas y flechas). Las figuras cerradas se pueden **rellenar**. |
 | **Color y grosor** | Botón de color con selector completo + paleta de 12 colores; deslizadores de **grosor** y **opacidad** (cada herramienta recuerda su propio tamaño y opacidad). También con la **rueda del ratón** sobre la pizarra. |
 | **Fondo** | Transparente, «Oscurecer escritorio», «Pizarra blanca» o «Pizarra verde» (para usarla como pizarra tradicional). |
+| **Zoom** | **Z**, **Ctrl+Alt+Z** o el botón de la lupa: congela la pantalla donde está el cursor y la amplía (2× al empezar, de 1× a 10×) para hacer énfasis en un detalle. **Rueda** para acercar/alejar centrado en el cursor, **clic derecho (o central) y arrastrar** para moverse, **Esc** para salir. Se puede dibujar encima con cualquier herramienta: los trazos quedan colocados sobre el contenido real al salir del zoom. |
 | **Deshacer / rehacer** | Historial ilimitado (también para la goma y «Borrar todo»). |
 | **Captura de pantalla** | Con o sin el trazado, de la pantalla actual o de todas, guardada en `%USERPROFILE%\Pictures\Capturas Pizarra` (la carpeta se crea si no existe) y copiada al portapapeles. |
 | **Bandeja del sistema** | Icono junto al reloj con menú (modo dibujo, mostrar/ocultar, capturas, ayuda, salir). |
@@ -71,13 +72,17 @@ También puedes compilarlo tú mismo: ver [Compilar el .exe](#compilar-el-exe).
    botón *Dibujando*) → pasa a **Ratón libre**: los dibujos siguen visibles pero los clics atraviesan
    la pizarra. Vuelve a pulsar **Ctrl+Alt+D** para seguir dibujando.
 4. **Ctrl+Alt+H** (o el botón del ojo) oculta/muestra todo lo dibujado.
-5. La barra se **mueve** arrastrando su título («⠿ Pizarra») y se **pliega** con la flecha ⌃.
-6. Para cerrar la aplicación usa el botón de apagado de la barra o *Salir* en el menú del icono de la
+5. La barra se **mueve** arrastrando su título («⠿ Pizarra») y se **pliega** con la flecha ⌃: la
+   ventana se reduce a la cabecera y se recuerda plegada para la próxima vez.
+6. Para **ampliar** una zona, pon el cursor encima y pulsa **Z** (o **Ctrl+Alt+Z** desde cualquier
+   programa). Usa la rueda para el aumento, clic derecho y arrastrar para desplazarte, dibuja lo que
+   necesites y sal con **Esc**.
+7. Para cerrar la aplicación usa el botón de apagado de la barra o *Salir* en el menú del icono de la
    bandeja.
 
 Barra de herramientas (de arriba abajo): modo dibujo · 10 herramientas · tipo de pincel (solo con el
 pincel) · relleno (solo figuras cerradas) · color actual y paleta · grosor · opacidad · fondo ·
-deshacer, rehacer, borrar todo · captura, carpeta de capturas, ocultar · ayuda, salir.
+deshacer, rehacer, borrar todo · zoom, captura, carpeta de capturas · ocultar, ayuda, salir.
 
 ## Atajos de teclado
 
@@ -87,6 +92,7 @@ deshacer, rehacer, borrar todo · captura, carpeta de capturas, ocultar · ayuda
 |---|---|
 | **Ctrl+Alt+D** | Activar / desactivar el dibujo (Dibujando ↔ Ratón libre) |
 | **Ctrl+Alt+H** | Mostrar / ocultar la pizarra |
+| **Ctrl+Alt+Z** | Zoom: ampliar la zona de la pantalla bajo el cursor (y salir del zoom) |
 | **Ctrl+Alt+S** | Captura de la pantalla actual **con** el trazado |
 | **Ctrl+Alt+Shift+S** | Captura de la pantalla actual **sin** el trazado |
 
@@ -115,8 +121,22 @@ deshacer, rehacer, borrar todo · captura, carpeta de capturas, ocultar · ayuda
 | **Ctrl+Z** | Deshacer |
 | **Ctrl+Y** o **Ctrl+Shift+Z** | Rehacer |
 | **Supr** | Borrar todo (se puede deshacer) |
-| **Esc** | Pasar a «Ratón libre» |
+| **Z** | Activar / salir del zoom |
+| **Esc** | Salir del zoom; fuera del zoom, pasar a «Ratón libre» |
 | **F1** | Ayuda con la lista de atajos |
+
+### En el zoom
+
+| Atajo | Acción |
+|---|---|
+| **Rueda del ratón** | Acercar / alejar (el punto bajo el cursor se queda fijo) |
+| **Clic derecho o central + arrastrar** | Mover la vista |
+| **Ctrl + rueda** | Grosor de la herramienta |
+| **Mayús + rueda** | Opacidad |
+| **Esc**, **Z** o **Ctrl+Alt+Z** | Salir del zoom |
+
+El zoom muestra una imagen congelada de la pantalla (los vídeos o animaciones no se mueven mientras
+dura); al salir se vuelve a ver el escritorio en vivo con lo dibujado encima.
 
 > Si otro programa ya usa alguno de los atajos globales, Pizarra Virtual lo avisa al arrancar; el resto
 > de atajos y todos los botones siguen funcionando.
@@ -132,7 +152,8 @@ Botón de la cámara (o los atajos globales) → opciones:
 
 La «pantalla actual» es la del monitor donde está el cursor. Antes de capturar, la barra y la pizarra
 se ocultan un instante para que no aparezcan en la imagen; en las capturas «con trazado» el dibujo se
-compone encima a resolución nativa.
+compone encima a resolución nativa. Si se captura **durante el zoom**, se guarda exactamente la
+vista ampliada que se está mostrando.
 
 Las imágenes se guardan en PNG en:
 
@@ -220,7 +241,8 @@ python main.py
 ```
 
 Pruebas automáticas (rasterizado de todas las herramientas, deshacer/rehacer, goma, figuras, pluma
-por velocidad, modo ratón libre, capturas y ajustes) con Qt en modo `offscreen`:
+—suavizado, afinado, velocidad, contorno sin huecos—, zoom, barra plegable, modo ratón libre, capturas
+y ajustes) con Qt en modo `offscreen`:
 
 ```bat
 pip install -r requirements-dev.txt
@@ -231,6 +253,11 @@ python -m pytest -q
 ```
 
 (`tests/conftest.py` activa automáticamente `QT_QPA_PLATFORM=offscreen`, así que no se abre ninguna ventana).
+
+`tests/test_windows_native.py` contiene pruebas que solo se ejecutan en Windows con ventanas reales
+(`QT_QPA_PLATFORM=windows`): tamaño real de la barra al plegarla, estilos que dejan pasar los clics,
+atajos globales y capturas del escritorio que comprueban que el trazo y el zoom se ven de verdad.
+GitHub Actions las ejecuta a 100 % y a 150 % de escala en cada compilación.
 
 ## Stack tecnológico y justificación
 
@@ -312,8 +339,8 @@ Pizarra_Virtual/
   carpeta temporal al iniciarse; es normal que tarde 1–3 segundos.
 - **Un atajo global no funciona**: otra aplicación lo tiene registrado (la app avisa al arrancar).
   Usa el botón equivalente de la barra o del icono de la bandeja.
-- **No puedo hacer clic en mis programas**: estás en modo **Dibujando**. Pulsa **Ctrl+Alt+D** o
-  **Esc** para pasar a **Ratón libre**.
+- **No puedo hacer clic en mis programas**: estás en modo **Dibujando** (o en el zoom). Pulsa
+  **Ctrl+Alt+D** o **Esc** para pasar a **Ratón libre**.
 - **Registro de errores**: `%LOCALAPPDATA%\PizarraVirtual\pizarra.log`.
 
 ## Licencia

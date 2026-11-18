@@ -85,7 +85,6 @@ class Overlay(QWidget):
         self._last_t = 0
         # Estado de la pluma
         self._smooth = QPointF()
-        self._raw_last = QPointF()
         self._speed_f = 1.0
         self._dir_f = 0.85
         self._press = 0.5
@@ -385,7 +384,6 @@ class Overlay(QWidget):
         self._last_pos = QPointF(pos)
         self._last_t = t
         self._smooth = QPointF(pos)
-        self._raw_last = QPointF(pos)
         self._speed_f = 1.0
         self._dir_f = 0.85
         self._press = pressure if pressure is not None else 0.5
@@ -451,7 +449,6 @@ class Overlay(QWidget):
         if self._stroke is not None:
             if self._stroke.tool == Tool.PEN:
                 # Estabilizador: suaviza el temblor del ratón/lápiz sin perder precisión.
-                self._raw_last = QPointF(pos)
                 k = _PEN_SMOOTHING_TABLET if pressure is not None else _PEN_SMOOTHING_MOUSE
                 self._smooth = QPointF(self._smooth.x() + (pos.x() - self._smooth.x()) * k,
                                        self._smooth.y() + (pos.y() - self._smooth.y()) * k)
