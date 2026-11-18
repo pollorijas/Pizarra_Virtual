@@ -11,6 +11,8 @@ class Tool(str, Enum):
     PEN = "pen"
     HIGHLIGHTER = "highlighter"
     ERASER = "eraser"
+    TEXT = "text"
+    LASER = "laser"
     RECT = "rect"
     ELLIPSE = "ellipse"
     TRIANGLE = "triangle"
@@ -56,6 +58,8 @@ TOOL_SPECS: dict[Tool, ToolSpec] = {
     Tool.PEN: ToolSpec("Pluma", "3", "pen", 3, 1, 30, 100),
     Tool.HIGHLIGHTER: ToolSpec("Destacador", "4", "highlighter", 24, 6, 90, 40),
     Tool.ERASER: ToolSpec("Goma de borrar", "5", "eraser", 30, 4, 250, 100, has_opacity=False),
+    Tool.TEXT: ToolSpec("Texto", "T", "text", 36, 10, 160, 100),
+    Tool.LASER: ToolSpec("Puntero láser / tinta temporal", "L", "laser", 14, 6, 40, 100, has_opacity=False),
     Tool.RECT: ToolSpec("Rectángulo / cuadrado", "6", "rect", 4, 1, 40, 100),
     Tool.ELLIPSE: ToolSpec("Elipse / círculo", "7", "ellipse", 4, 1, 40, 100),
     Tool.TRIANGLE: ToolSpec("Triángulo", "8", "triangle", 4, 1, 40, 100),
@@ -76,4 +80,14 @@ BACKGROUNDS = {
     "dim": "Oscurecer escritorio",
     "white": "Pizarra blanca",
     "chalk": "Pizarra verde",
+}
+
+# Pautas que se dibujan sobre el fondo: clave -> etiqueta
+PATTERNS = {
+    "none": "Sin pauta",
+    "grid": "Cuadrícula",
+    "ruled": "Hoja rayada",
+    "calligraphy": "Pauta de caligrafía",
+    "cartesian": "Plano cartesiano",
+    "staff": "Pentagrama",
 }

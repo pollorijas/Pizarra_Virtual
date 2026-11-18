@@ -13,9 +13,11 @@ import math
 import random
 
 from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QBrush, QColor, QPainter, QPainterPath, QPen, QPolygonF, QRadialGradient
+from PySide6.QtGui import (
+    QBrush, QColor, QFont, QFontMetricsF, QImage, QPainter, QPainterPath, QPen, QPolygonF, QRadialGradient,
+)
 
-from .items import ClearItem, ShapeItem, StrokeItem
+from .items import ClearItem, ShapeItem, StrokeItem, TextItem
 from .tools import FILLABLE_SHAPES, BrushType, Tool
 
 NIB_ANGLE = math.radians(40)      # ángulo de la punta caligráfica
@@ -498,6 +500,154 @@ def shape_rect(item: ShapeItem) -> QRectF:
     return QRectF(QPointF(item.x1, item.y1), QPointF(item.x2, item.y2)).normalized().adjusted(-m, -m, m, m)
 
 
+# --------------------------------------------------------------------------- texto
+
+TEXT_FAMILIES = ["Segoe UI", "Arial", "Helvetica", "DejaVu Sans", "sans-serif"]
+
+
+def text_font(item: TextItem) -> QFont:
+    f = QFont()
+    f.setFamilies(TEXT_FAMILIES)
+    f.setPixelSize(max(4, int(round(item.size))))
+    f.setBold(item.bold)
+    return f
+
+
+def text_lines(item: TextItem) -> list[str]:
+    return item.text.split("\n") if item.text else [""]
+
+
+def text_box(item: TextItem) -> QRectF:
+    """Rectángulo que ocupa el texto (sin márgenes)."""
+    fm = QFontMetricsF(text_font(item))
+    lines = text_lines(item)
+    width = max([fm.horizontalAdvance(line) for line in lines] + [fm.averageCharWidth()])
+    return QRectF(item.x, item.y, width, fm.lineSpacing() * len(lines))
+
+
+def text_caret(item: TextItem) -> tuple[QPointF, QPointF]:
+    """Extremos del cursor de escritura (al final del texto)."""
+    fm = QFontMetricsF(text_font(item))
+    lines = text_lines(item)
+    x = item.x + fm.horizontalAdvance(lines[-1])
+    top = item.y + fm.lineSpacing() * (len(lines) - 1)
+    return QPointF(x + 1, top + 2), QPointF(x + 1, top + fm.height() - 2)
+
+
+def draw_text(p: QPainter, item: TextItem) -> None:
+    font = text_font(item)
+    fm = QFontMetricsF(font)
+    p.setFont(font)
+    p.setPen(item_color(item))
+    for i, line in enumerate(text_lines(item)):
+        if line:
+            p.drawText(QPointF(item.x, item.y + fm.ascent() + i * fm.lineSpacing()), line)
+
+
+# --------------------------------------------------------------------------- pautas de fondo
+
+PAPER_COLORS = {"white": QColor(255, 255, 255), "chalk": QColor(31, 58, 46)}
+
+
+def pattern_colors(background: str) -> tuple[QColor, QColor]:
+    """(línea suave, línea marcada) según el fondo, para que la pauta se vea en todos."""
+    if background == "white":
+        return QColor(120, 150, 190, 120), QColor(60, 90, 140, 220)
+    if background in ("chalk", "dim"):
+        return QColor(255, 255, 255, 70), QColor(255, 255, 255, 170)
+    return QColor(70, 110, 170, 110), QColor(40, 80, 150, 210)  # sobre el escritorio
+
+
+def draw_pattern(p: QPainter, w: float, h: float, pattern: str, background: str) -> None:
+    """Dibuja la pauta en un área de w x h píxeles lógicos."""
+    if pattern in (None, "", "none"):
+        return
+    soft, strong = pattern_colors(background)
+    p.save()
+    p.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+
+    def hline(y, color, width=1.0, x0=0.0, x1=None, dash=False):
+        pen = QPen(color, width)
+        if dash:
+            pen.setStyle(Qt.PenStyle.DashLine)
+        p.setPen(pen)
+        p.drawLine(QPointF(x0, y), QPointF(w if x1 is None else x1, y))
+
+    def vline(x, color, width=1.0):
+        p.setPen(QPen(color, width))
+        p.drawLine(QPointF(x, 0), QPointF(x, h))
+
+    if pattern == "grid":
+        step = 32
+        for i in range(0, int(w // step) + 1):
+            vline(i * step + 0.5, strong if i % 5 == 0 else soft)
+        for i in range(0, int(h // step) + 1):
+            hline(i * step + 0.5, strong if i % 5 == 0 else soft)
+    elif pattern == "ruled":
+        y = 96.5
+        while y < h:
+            hline(y, soft, 1.2)
+            y += 36
+        p.setPen(QPen(QColor(220, 70, 70, 170), 1.5))
+        p.drawLine(QPointF(96.5, 0), QPointF(96.5, h))
+    elif pattern == "calligraphy":
+        # Pauta de 4 líneas: ascendentes, altura de la x (discontinua), base (marcada), descendentes.
+        unit, gap = 30, 34
+        y = 70.5 if h >= 300 else 10.5  # en áreas pequeñas empieza más arriba para que quepa
+        while y + 3 * unit < h:
+            hline(y, soft)
+            hline(y + unit, soft, 1.0, dash=True)
+            hline(y + 2 * unit, strong, 1.6)
+            hline(y + 3 * unit, soft)
+            y += 3 * unit + gap
+    elif pattern == "staff":
+        line_gap, group_gap = 14, 74
+        y = 80.5 if h >= 300 else 10.5
+        while y + 4 * line_gap < h:
+            for k in range(5):
+                hline(y + k * line_gap, strong, 1.2, x0=48, x1=w - 48)
+            y += 4 * line_gap + group_gap
+    elif pattern == "cartesian":
+        unit = 40
+        cx, cy = round(w / 2) + 0.5, round(h / 2) + 0.5
+        k = 0
+        while cx + k * unit < w or cx - k * unit > 0:
+            for x in (cx + k * unit, cx - k * unit):
+                vline(x, soft)
+            k += 1
+        k = 0
+        while cy + k * unit < h or cy - k * unit > 0:
+            for y in (cy + k * unit, cy - k * unit):
+                hline(y, soft)
+            k += 1
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        axis = QPen(strong, 2.0)
+        p.setPen(axis)
+        p.drawLine(QPointF(0, cy), QPointF(w - 4, cy))
+        p.drawLine(QPointF(cx, h), QPointF(cx, 4))
+        p.setBrush(strong)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.drawPolygon(QPolygonF([QPointF(w - 2, cy), QPointF(w - 14, cy - 6), QPointF(w - 14, cy + 6)]))
+        p.drawPolygon(QPolygonF([QPointF(cx, 2), QPointF(cx - 6, 14), QPointF(cx + 6, 14)]))
+        f = QFont()
+        f.setFamilies(TEXT_FAMILIES)
+        f.setPixelSize(11)
+        p.setFont(f)
+        p.setPen(strong)
+        n = 1
+        while cx + n * unit < w - 20 or cy - n * unit > 20:
+            for val, x, y in ((n, cx + n * unit, cy), (-n, cx - n * unit, cy)):
+                if 4 < x < w - 20:
+                    p.drawText(QRectF(x - 15, y + 3, 30, 14), Qt.AlignmentFlag.AlignHCenter, str(val))
+            for val, x, y in ((n, cx, cy - n * unit), (-n, cx, cy + n * unit)):
+                if 20 < y < h - 8:
+                    p.drawText(QRectF(x - 34, y - 7, 30, 14), Qt.AlignmentFlag.AlignRight, str(val))
+            n += 1
+        p.drawText(QRectF(w - 22, cy + 6, 16, 14), Qt.AlignmentFlag.AlignHCenter, "x")
+        p.drawText(QRectF(cx + 8, 6, 16, 14), Qt.AlignmentFlag.AlignLeft, "y")
+    p.restore()
+
+
 # --------------------------------------------------------------------------- genérico
 
 
@@ -506,6 +656,8 @@ def draw_item(p: QPainter, item) -> None:
         draw_stroke(p, item)
     elif isinstance(item, ShapeItem):
         draw_shape(p, item)
+    elif isinstance(item, TextItem):
+        draw_text(p, item)
 
 
 def item_rect(item) -> QRectF:
@@ -513,6 +665,8 @@ def item_rect(item) -> QRectF:
         return stroke_rect(item)
     if isinstance(item, ShapeItem):
         return shape_rect(item)
+    if isinstance(item, TextItem):
+        return text_box(item).adjusted(-4, -4, item.size + 8, 6)
     return QRectF()
 
 
@@ -520,7 +674,41 @@ def is_eraser(item) -> bool:
     return isinstance(item, StrokeItem) and item.tool == Tool.ERASER
 
 
+def apply_item_to_canvas(canvas: QImage, layer: QImage, item) -> None:
+    """Aplica un elemento del historial al lienzo.
+
+    ``layer`` es una imagen auxiliar transparente del mismo tamaño: cada trazo se pinta
+    primero opaco en ella y luego se compone con su opacidad, así un destacador no se
+    oscurece donde el propio trazo se superpone. Al terminar, ``layer`` queda limpia.
+    """
+    if isinstance(item, ClearItem):
+        canvas.fill(Qt.GlobalColor.transparent)
+        return
+    if is_eraser(item):
+        p = QPainter(canvas)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setCompositionMode(QPainter.CompositionMode.CompositionMode_DestinationOut)
+        draw_item(p, item)
+        p.end()
+        return
+    rect = item_rect(item).adjusted(-2, -2, 2, 2)
+    p = QPainter(layer)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    draw_item(p, item)
+    p.end()
+    p = QPainter(canvas)
+    p.setClipRect(rect)
+    p.setOpacity(max(0.0, min(1.0, item.opacity)))
+    p.drawImage(QPointF(0, 0), layer)
+    p.end()
+    p = QPainter(layer)
+    p.setCompositionMode(QPainter.CompositionMode.CompositionMode_Clear)
+    p.fillRect(rect, Qt.GlobalColor.transparent)
+    p.end()
+
+
 __all__ = [
     "StrokeState", "draw_segment", "segment_rect", "draw_stroke", "draw_shape", "shape_rect",
-    "draw_item", "item_rect", "constrain_shape", "is_eraser", "ClearItem",
+    "draw_item", "item_rect", "constrain_shape", "is_eraser", "ClearItem", "apply_item_to_canvas",
+    "draw_pattern", "draw_text", "text_box", "text_caret",
 ]

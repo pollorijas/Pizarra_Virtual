@@ -189,7 +189,7 @@ def test_native_global_hotkey_messages(qapp, tmp_path, monkeypatch):
         c.start()
         _settle(qapp)
         ids = sorted(c.hotkeys._callbacks)
-        assert len(ids) == 5, "no se registraron todos los atajos globales"
+        assert len(ids) == 7, "no se registraron todos los atajos globales"
         _, _, user32 = _win32()
         assert c.drawing
         user32.PostMessageW(c.hotkeys._hwnd, WM_HOTKEY, ids[0], 0)  # Ctrl+Alt+D
@@ -199,10 +199,7 @@ def test_native_global_hotkey_messages(qapp, tmp_path, monkeypatch):
         _settle(qapp, 200)
         assert c.drawing
     finally:
-        c.hotkeys.unregister_all()
-        for ov in list(c.overlays.values()):
-            ov.close()
-        c.toolbar.close()
+        c.shutdown()
         _settle(qapp, 100)
 
 
@@ -280,3 +277,77 @@ def test_native_capture_file_contains_drawing(ctrl, qapp, tmp_path):
     assert img.size == (round(ov.width() * dpr), round(ov.height() * dpr))
     assert _is_red(img.getpixel((round(400 * dpr), round(200 * dpr))))
     assert ov.isVisible() and ctrl.toolbar.isVisible()  # la pizarra vuelve a mostrarse
+
+
+def _real_keys(qapp, text):
+    """Pulsa teclas REALES del sistema (keybd_event) para letras, dígitos y espacio."""
+    _, _, user32 = _win32()
+    for ch in text.upper():
+        vk = 0x20 if ch == " " else ord(ch)
+        user32.keybd_event(vk, 0, 0, 0)
+        user32.keybd_event(vk, 0, 2, 0)  # KEYEVENTF_KEYUP
+        _settle(qapp, 30)
+
+
+def test_native_text_tool_with_real_keyboard(ctrl, qapp):
+    """Clic real con la herramienta Texto y teclas reales: el texto se escribe (sin disparar
+    atajos como 1, F o Z) aunque la pizarra nunca toma el foco."""
+    from pizarra_virtual.tools import Tool
+
+    ov = _overlay(ctrl)
+    ctrl.set_tool(Tool.TEXT)
+    _settle(qapp)
+    dpr = ov.devicePixelRatioF()
+    _real_mouse(qapp, [(300, 250), (300, 250)], dpr)
+    assert ctrl.text_editor is ov
+    _real_keys(qapp, "hola 1 fz")
+    _, _, user32 = _win32()
+    user32.keybd_event(0x1B, 0, 0, 0)  # Esc
+    user32.keybd_event(0x1B, 0, 2, 0)
+    _settle(qapp, 300)
+    assert ctrl.tool == Tool.TEXT and not ctrl.spotlight and not ctrl.zoom_active
+    assert ctrl.history and ctrl.history[-1][1].text == "hola 1 fz"
+    shot = _grab("texto_teclado_real.png")
+    assert shot is not None
+
+
+def test_native_click_ripple_on_other_programs(ctrl, qapp):
+    """En «Ratón libre», un clic real sobre otra ventana también muestra la onda del clic."""
+    ov = _overlay(ctrl)
+    ctrl.set_drawing(False)
+    ctrl.toggle_highlight()
+    _settle(qapp, 200)
+    dpr = ov.devicePixelRatioF()
+    try:
+        _, _, user32 = _win32()
+        user32.SetCursorPos(round(500 * dpr), round(400 * dpr))
+        _settle(qapp, 100)
+        user32.mouse_event(0x0002, 0, 0, 0, 0)
+        _settle(qapp, 60)
+        assert ov._ripples, "no se detectó el clic real"
+        shot = _grab("onda_clic.png")
+        user32.mouse_event(0x0004, 0, 0, 0, 0)
+        ripple_px = [shot.getpixel((round((500 + dx) * dpr), round(400 * dpr))) for dx in range(8, 40)]
+        assert any(_is_red(px) or (px[0] > 180 and px[1] < 120) for px in ripple_px)
+    finally:
+        ctrl.toggle_highlight()
+        ctrl.set_drawing(True)
+        _settle(qapp, 100)
+
+
+def test_native_spotlight_on_real_desktop(ctrl, qapp):
+    ov = _overlay(ctrl)
+    dpr = ov.devicePixelRatioF()
+    _, _, user32 = _win32()
+    _settle(qapp)
+    before = _grab("sin_foco.png")
+    user32.SetCursorPos(round(400 * dpr), round(300 * dpr))
+    ctrl.toggle_spotlight()
+    _settle(qapp, 300)
+    shot = _grab("foco.png")
+    ctrl.toggle_spotlight()
+    far = (round(400 * dpr), round((300 + ctrl.spotlight_radius + 60) * dpr))
+    near = (round(400 * dpr), round(300 * dpr))
+    lum = lambda px: sum(px[:3]) / 3  # noqa: E731
+    assert lum(shot.getpixel(far)) < lum(before.getpixel(far)) * 0.5 + 1  # fuera del foco: oscuro
+    assert abs(lum(shot.getpixel(near)) - lum(before.getpixel(near))) < 25  # dentro: igual que antes

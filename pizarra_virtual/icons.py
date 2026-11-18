@@ -6,6 +6,7 @@ from functools import lru_cache
 from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import (
     QColor, QFont, QIcon, QImage, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QPolygonF,
+    QRadialGradient,
 )
 
 FG = "#e6e8eb"
@@ -207,6 +208,126 @@ def _zoom(p, c):
     p.drawLine(QPointF(10, 7), QPointF(10, 13))
 
 
+def _text(p, c):
+    f = QFont()
+    f.setFamilies(["Georgia", "Times New Roman", "serif"])
+    f.setBold(True)
+    f.setPixelSize(19)
+    p.setFont(f)
+    p.setPen(c)
+    p.drawText(QRectF(2, 1, 20, 22), Qt.AlignmentFlag.AlignCenter, "T")
+    p.setPen(_pen(c, 1.4))
+    p.drawLine(QPointF(17.5, 15), QPointF(17.5, 22))
+
+
+def _laser(p, c):
+    red = QColor(255, 70, 70)
+    g = QRadialGradient(QPointF(12, 12), 7)
+    g.setColorAt(0, QColor(255, 255, 255))
+    g.setColorAt(0.35, red)
+    g.setColorAt(1, QColor(255, 70, 70, 0))
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(g)
+    p.drawEllipse(QPointF(12, 12), 7, 7)
+    p.setPen(_pen(c, 1.6))
+    for a, b in (((12, 1.5), (12, 4.5)), ((12, 19.5), (12, 22.5)), ((1.5, 12), (4.5, 12)), ((19.5, 12), (22.5, 12)),
+                 ((4.5, 4.5), (6.5, 6.5)), ((17.5, 17.5), (19.5, 19.5)), ((4.5, 19.5), (6.5, 17.5)),
+                 ((17.5, 6.5), (19.5, 4.5))):
+        p.drawLine(QPointF(*a), QPointF(*b))
+
+
+def _spotlight(p, c):
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QColor(c.red(), c.green(), c.blue(), 70))
+    p.drawRoundedRect(QRectF(2, 3, 20, 18), 3, 3)
+    p.setBrush(QColor(255, 225, 90))
+    p.drawEllipse(QPointF(12, 12), 5.5, 5.5)
+    p.setPen(_pen(c, 1.4))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawRoundedRect(QRectF(2, 3, 20, 18), 3, 3)
+
+
+def _curtain(p, c):
+    p.setPen(_pen(c, 1.6))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawRect(QRectF(3, 3, 18, 18))
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(c)
+    p.drawRect(QRectF(3, 11, 18, 10))
+    p.setBrush(QColor(80, 140, 230))
+    p.drawRect(QRectF(3, 10, 18, 2))
+    p.setPen(_pen(c, 1.6))
+    p.drawPolyline(_poly((9, 6), (12, 8.5), (15, 6)))
+
+
+def _highlight(p, c):
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QColor(255, 220, 0, 120))
+    p.drawEllipse(QPointF(10, 10), 8.5, 8.5)
+    p.setPen(_pen(c, 1.5))
+    p.setBrush(QColor(30, 32, 37))
+    p.drawPolygon(_poly((8, 6), (8, 20), (11.5, 16.6), (14, 22), (16.3, 21), (13.8, 15.8), (18.5, 15.5)))
+
+
+def _page_prev(p, c):
+    p.setPen(_pen(c, 2.2))
+    p.drawPolyline(_poly((15, 5), (8, 12), (15, 19)))
+
+
+def _page_next(p, c):
+    p.setPen(_pen(c, 2.2))
+    p.drawPolyline(_poly((9, 5), (16, 12), (9, 19)))
+
+
+def _page_add(p, c):
+    p.setPen(_pen(c, 1.6))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawPolygon(_poly((5, 3), (14, 3), (19, 8), (19, 21), (5, 21)))
+    p.drawPolyline(_poly((14, 3), (14, 8), (19, 8)))
+    p.setPen(_pen(c, 2))
+    p.drawLine(QPointF(12, 11), QPointF(12, 18))
+    p.drawLine(QPointF(8.5, 14.5), QPointF(15.5, 14.5))
+
+
+def _file(p, c):
+    p.setPen(_pen(c, 1.6))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawPolygon(_poly((5, 3), (14, 3), (19, 8), (19, 21), (5, 21)))
+    p.drawPolyline(_poly((14, 3), (14, 8), (19, 8)))
+    for y in (12, 15, 18):
+        p.drawLine(QPointF(8, y), QPointF(16, y))
+
+
+def _save(p, c):
+    p.setPen(_pen(c, 1.6))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawPolygon(_poly((4, 4), (17, 4), (20, 7), (20, 20), (4, 20)))
+    p.drawRect(QRectF(8, 4, 8, 5))
+    p.drawRect(QRectF(7, 13, 10, 7))
+
+
+def _pdf(p, c):
+    _file(p, c)
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QColor(220, 60, 60))
+    p.drawRoundedRect(QRectF(2, 12, 15, 8), 2, 2)
+    f = QFont()
+    f.setBold(True)
+    f.setPixelSize(7)
+    p.setFont(f)
+    p.setPen(QColor(255, 255, 255))
+    p.drawText(QRectF(2, 12, 15, 8), Qt.AlignmentFlag.AlignCenter, "PDF")
+
+
+def _bold(p, c):
+    f = QFont()
+    f.setBold(True)
+    f.setPixelSize(17)
+    p.setFont(f)
+    p.setPen(c)
+    p.drawText(QRectF(2, 2, 20, 20), Qt.AlignmentFlag.AlignCenter, "B")
+
+
 def _chevron_up(p, c):
     p.setPen(_pen(c, 2))
     p.drawPolyline(_poly((6, 15), (12, 9), (18, 15)))
@@ -222,7 +343,9 @@ _ICONS = {
     "eraser": _eraser, "rect": _rect, "ellipse": _ellipse, "triangle": _triangle,
     "line": _line, "arrow": _arrow, "undo": _undo, "redo": _redo, "trash": _trash,
     "camera": _camera, "folder": _folder, "eye": _eye, "eye_off": _eye_off, "power": _power,
-    "mouse": _mouse, "help": _help, "zoom": _zoom, "chevron_up": _chevron_up, "chevron_down": _chevron_down,
+    "mouse": _mouse, "help": _help, "zoom": _zoom, "text": _text, "laser": _laser, "spotlight": _spotlight,
+    "curtain": _curtain, "highlight": _highlight, "page_prev": _page_prev, "page_next": _page_next,
+    "page_add": _page_add, "file": _file, "save": _save, "pdf": _pdf, "bold": _bold, "chevron_up": _chevron_up, "chevron_down": _chevron_down,
 }
 
 

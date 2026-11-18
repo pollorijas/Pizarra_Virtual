@@ -8,9 +8,14 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Publicar como release con esta versión (p. ej. v1.1.0). Vacío = solo compilar."
+        description: "Publicar como release con esta versión (p. ej. v1.2.0). Vacío = solo compilar."
         required: false
         default: ""
+      borrar_anteriores:
+        description: "Al publicar, eliminar las releases (y etiquetas) anteriores y dejar solo esta."
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: write
@@ -65,11 +70,29 @@ jobs:
           Get-Content "$env:LOCALAPPDATA\PizarraVirtual\pizarra.log"
           if ($p.ExitCode -ne 0) { throw "El autodiagnóstico falló (código $($p.ExitCode))" }
 
+      - name: Generar el manual de usuario (PDF)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python tools/build_manual.py --out "dist/Manual de usuario.pdf"
+
+      - name: Empaquetar en .zip (ejecutable + manual)
+        shell: pwsh
+        run: |
+          $ver = "${{ inputs.version || github.ref_name }}"
+          if (-not $ver.StartsWith("v")) { $ver = "dev" }
+          $zip = "dist/PizarraVirtual-$ver.zip"
+          Compress-Archive -Path "dist/PizarraVirtual.exe", "dist/Manual de usuario.pdf" -DestinationPath $zip -Force
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $names = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $zip)).Entries | ForEach-Object { $_.FullName }
+          Write-Host "Contenido de $zip :"; $names | ForEach-Object { Write-Host "  $_" }
+          if (-not ($names -contains "PizarraVirtual.exe" -and $names -contains "Manual de usuario.pdf")) { throw "El zip no está completo" }
+          "ZIP=$zip" >> $env:GITHUB_ENV
+
       - name: Subir artefacto
         uses: actions/upload-artifact@v4
         with:
-          name: PizarraVirtual-exe
-          path: dist/PizarraVirtual.exe
+          name: PizarraVirtual
+          path: ${{ env.ZIP }}
 
       - name: Publicar release (etiqueta v* o versión indicada al lanzarlo a mano)
         if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.version != '')
@@ -80,5 +103,21 @@ jobs:
           target_commitish: ${{ github.sha }}
           name: Pizarra Virtual ${{ inputs.version || github.ref_name }}
           body_path: notas/${{ inputs.version || github.ref_name }}.md
-          files: dist/PizarraVirtual.exe
+          files: ${{ env.ZIP }}
           generate_release_notes: true
+
+      - name: Eliminar releases anteriores (si se pidió)
+        if: github.event_name == 'workflow_dispatch' && inputs.version != '' && inputs.borrar_anteriores
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $current = "${{ inputs.version }}"
+          $tags = gh release list --repo "${{ github.repository }}" --limit 100 --json tagName --jq '.[].tagName'
+          foreach ($t in $tags) {
+            if ($t -and $t -ne $current) {
+              Write-Host "Eliminando release $t"
+              gh release delete $t --repo "${{ github.repository }}" --yes --cleanup-tag
+            }
+          }
+          gh release list --repo "${{ github.repository }}"

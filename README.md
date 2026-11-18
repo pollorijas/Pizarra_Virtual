@@ -8,14 +8,19 @@ cualquier ventana o programa abierto (presentaciones, PDF, navegador, vídeos, c
 herramientas parecidas a las de un editor de imagen sencillo, y guardar capturas de pantalla con o
 sin lo que has dibujado.
 
-Se distribuye como un único ejecutable **`PizarraVirtual.exe`** que no necesita instalación.
+Está pensada para **dar clase y presentar**: texto, foco, cortina, puntero láser, zoom, resaltado del
+cursor y de los clics, pautas de escritura (cuadrícula, rayado, caligrafía, plano cartesiano,
+pentagrama), varias páginas, guardado de la clase y exportación a PDF.
+
+Se distribuye como un **`.zip`** con el ejecutable **`PizarraVirtual.exe`** (no necesita instalación) y
+el **Manual de usuario** en PDF.
 
 ---
 
 ## Índice
 
 1. [Características](#características)
-2. [Descargar el .exe](#descargar-el-exe)
+2. [Descargar](#descargar)
 3. [Cómo se usa](#cómo-se-usa)
 4. [Atajos de teclado](#atajos-de-teclado)
 5. [Capturas de pantalla](#capturas-de-pantalla)
@@ -41,25 +46,34 @@ Se distribuye como un único ejecutable **`PizarraVirtual.exe`** que no necesita
 | **Goma de borrar** | Borra píxeles de los trazos con tamaño ajustable (4–250 px). Con un lápiz de tableta, el extremo «goma» del lápiz borra automáticamente. |
 | **Figuras** | **Rectángulo/cuadrado**, **elipse/círculo**, **triángulo**, **línea** y **flecha**, dibujadas arrastrando el cursor. Con **Mayús** se fuerzan proporciones iguales (cuadrado, círculo) o ángulos de 15° (líneas y flechas). Las figuras cerradas se pueden **rellenar**. |
 | **Color y grosor** | Botón de color con selector completo + paleta de 12 colores; deslizadores de **grosor** y **opacidad** (cada herramienta recuerda su propio tamaño y opacidad). También con la **rueda del ratón** sobre la pizarra. |
+| **Texto** | Tecla **T**: clic donde quieras y escribe con el teclado (tildes, ñ, varias líneas, Ctrl+V para pegar). Tamaño de letra, color y **negrita**. Mientras escribes, las teclas no activan atajos. Esc o un clic fuera termina el texto. |
+| **Puntero láser / tinta temporal** | Tecla **L**: el cursor se convierte en un punto luminoso; al arrastrar deja un trazo brillante que **se desvanece solo** (no se guarda). |
 | **Fondo** | Transparente, «Oscurecer escritorio», «Pizarra blanca» o «Pizarra verde» (para usarla como pizarra tradicional). |
+| **Pautas** | **Cuadrícula**, **hoja rayada**, **pauta de caligrafía** (4 líneas), **plano cartesiano** con ejes numerados y **pentagrama**, sobre cualquier fondo. Se incluyen en capturas y PDF. |
+| **Foco** | **F** / **Ctrl+Alt+F**: oscurece la pantalla salvo un círculo alrededor del cursor (**Alt + rueda** para su tamaño). Funciona también en «Ratón libre», sobre otros programas. |
+| **Cortina** | **V**: tapa la pantalla y se descubre poco a poco arrastrándola o con **↓ / ↑** (preguntas antes que respuestas, textos párrafo a párrafo). |
+| **Resaltar cursor y clics** | **M** / **Ctrl+Alt+M**: halo amarillo alrededor del puntero y una onda en cada clic (roja izquierdo, azul derecho), también al hacer clic en otros programas. |
+| **Páginas** | Varias páginas por clase, cada una con su dibujo, historial, fondo y pauta. **N** crea una nueva, **AvPág / RePág** pasan de página (compatible con presentadores inalámbricos). |
+| **Sesiones y PDF** | **Guardar / abrir** la clase en un archivo `.pizarra` (Ctrl+S / Ctrl+O) y **exportar a PDF** (Ctrl+P) con una página del PDF por página de la pizarra. |
 | **Zoom** | **Z**, **Ctrl+Alt+Z** o el botón de la lupa: congela la pantalla donde está el cursor y la amplía (2× al empezar, de 1× a 10×) para hacer énfasis en un detalle. **Rueda** para acercar/alejar centrado en el cursor, **clic derecho (o central) y arrastrar** para moverse, **Esc** para salir. Se puede dibujar encima con cualquier herramienta: los trazos quedan colocados sobre el contenido real al salir del zoom. |
 | **Deshacer / rehacer** | Historial ilimitado (también para la goma y «Borrar todo»). |
 | **Captura de pantalla** | Con o sin el trazado, de la pantalla actual o de todas, guardada en `%USERPROFILE%\Pictures\Capturas Pizarra` (la carpeta se crea si no existe) y copiada al portapapeles. |
-| **Bandeja del sistema** | Icono junto al reloj con menú (modo dibujo, mostrar/ocultar, capturas, ayuda, salir). |
+| **Bandeja del sistema** | Icono junto al reloj con menú (modo dibujo, mostrar/ocultar, foco, resaltado, zoom, capturas, sesión y PDF, ayuda, manual, salir). |
+| **Manual de usuario** | PDF incluido en el zip y accesible desde el botón de ayuda: todas las funciones, atajos e ideas para clase. Se genera automáticamente desde [`docs/manual.html`](docs/manual.html) con capturas de la versión actual. |
 
 La configuración (herramienta, color, tamaños, posición de la barra…) se recuerda entre sesiones.
 
-## Descargar el .exe
+## Descargar
 
-Cada vez que se sube código a `main`, **GitHub Actions** compila el ejecutable en una máquina Windows,
-ejecuta las pruebas y un autodiagnóstico del `.exe`:
+En la página de **[Releases](https://github.com/pollorijas/Pizarra_Virtual/releases/latest)** descarga
+**`PizarraVirtual-vX.Y.Z.zip`**, descomprímelo y ejecuta `PizarraVirtual.exe`. El zip contiene:
 
-1. Abre la pestaña **Actions** del repositorio → flujo **«Compilar PizarraVirtual.exe»**.
-2. Entra en la ejecución más reciente (en verde) y descarga el artefacto **`PizarraVirtual-exe`**
-   (es un `.zip` que contiene `PizarraVirtual.exe`).
+- `PizarraVirtual.exe` — la aplicación (un único archivo, sin instalación).
+- `Manual de usuario.pdf` — guía completa de uso.
 
-Si se publica una etiqueta de versión (`v1.0.0`, `v1.1.0`…), el `.exe` también se adjunta
-automáticamente a la página de **Releases**.
+Además, cada vez que se sube código a `main`, **GitHub Actions** compila, prueba y empaqueta la versión
+en desarrollo: en la pestaña **Actions → «Compilar PizarraVirtual.exe»**, la ejecución más reciente
+tiene el artefacto **`PizarraVirtual`** con el mismo `.zip`.
 
 También puedes compilarlo tú mismo: ver [Compilar el .exe](#compilar-el-exe).
 
@@ -93,6 +107,8 @@ deshacer, rehacer, borrar todo · zoom, captura, carpeta de capturas · ocultar,
 | **Ctrl+Alt+D** | Activar / desactivar el dibujo (Dibujando ↔ Ratón libre) |
 | **Ctrl+Alt+H** | Mostrar / ocultar la pizarra |
 | **Ctrl+Alt+Z** | Zoom: ampliar la zona de la pantalla bajo el cursor (y salir del zoom) |
+| **Ctrl+Alt+F** | Foco |
+| **Ctrl+Alt+M** | Resaltar el cursor y los clics |
 | **Ctrl+Alt+S** | Captura de la pantalla actual **con** el trazado |
 | **Ctrl+Alt+Shift+S** | Captura de la pantalla actual **sin** el trazado |
 
@@ -111,7 +127,9 @@ deshacer, rehacer, borrar todo · zoom, captura, carpeta de capturas · ocultar,
 | **9** | Línea |
 | **0** | Flecha |
 | **B** | Cambiar tipo de pincel (Duro → Suave → Aerógrafo → Caligráfico) |
-| **F** | Activar / desactivar relleno de figuras |
+| **T** | Texto |
+| **L** | Puntero láser / tinta temporal |
+| **R** | Activar / desactivar relleno de figuras |
 | **C** | Abrir el selector de color |
 | **+** / **-** (o **]** / **[**) | Aumentar / reducir el grosor |
 | **Rueda del ratón** | Aumentar / reducir el grosor |
@@ -122,6 +140,13 @@ deshacer, rehacer, borrar todo · zoom, captura, carpeta de capturas · ocultar,
 | **Ctrl+Y** o **Ctrl+Shift+Z** | Rehacer |
 | **Supr** | Borrar todo (se puede deshacer) |
 | **Z** | Activar / salir del zoom |
+| **F** · **V** · **M** | Foco · Cortina · Resaltar cursor y clics |
+| **↓ / ↑** | Descubrir / tapar con la cortina |
+| **Alt + rueda** | Tamaño del foco |
+| **N** | Página nueva |
+| **AvPág / RePág** | Página siguiente / anterior |
+| **Ctrl+S** · **Ctrl+Shift+S** | Guardar sesión · Guardar como |
+| **Ctrl+O** · **Ctrl+P** | Abrir sesión · Exportar a PDF |
 | **Esc** | Salir del zoom; fuera del zoom, pasar a «Ratón libre» |
 | **F1** | Ayuda con la lista de atajos |
 
@@ -134,6 +159,14 @@ deshacer, rehacer, borrar todo · zoom, captura, carpeta de capturas · ocultar,
 | **Ctrl + rueda** | Grosor de la herramienta |
 | **Mayús + rueda** | Opacidad |
 | **Esc**, **Z** o **Ctrl+Alt+Z** | Salir del zoom |
+
+### Escribiendo texto
+
+| Atajo | Acción |
+|---|---|
+| **Intro** | Nueva línea |
+| **Esc**, **Ctrl+Intro** o clic fuera | Terminar el texto |
+| **Retroceso** · **Ctrl+V** · **Tab** | Borrar · Pegar · Sangría |
 
 El zoom muestra una imagen congelada de la pantalla (los vídeos o animaciones no se mueven mientras
 dura); al salir se vuelve a ver el escritorio en vivo con lo dibujado encima.
@@ -175,8 +208,9 @@ Requisitos: **Python 3.10–3.13 de 64 bits** para Windows (marca *Add python.ex
 build.bat
 ```
 
-El script crea un entorno virtual `.venv`, instala las dependencias y genera
-**`dist\PizarraVirtual.exe`**.
+El script crea un entorno virtual `.venv`, instala las dependencias, genera
+**`dist\PizarraVirtual.exe`**, el **`dist\Manual de usuario.pdf`** y el paquete
+**`dist\PizarraVirtual.zip`** con ambos.
 
 ### Opción B: paso a paso (PowerShell o CMD)
 
@@ -227,6 +261,15 @@ release con `PizarraVirtual.exe`.
 
 > PyInstaller no compila de forma cruzada: el `.exe` de Windows debe generarse en Windows (en tu PC o
 > en el runner de GitHub Actions).
+
+### Manual de usuario
+
+El manual se escribe en [`docs/manual.html`](docs/manual.html) y se convierte a PDF con capturas
+generadas automáticamente de la versión actual:
+
+```bat
+python tools\build_manual.py --out "dist\Manual de usuario.pdf"
+```
 
 ### Regenerar el icono (opcional)
 
@@ -322,11 +365,15 @@ Pizarra_Virtual/
 ├── requirements-dev.txt          # PyInstaller, pytest, Pillow
 ├── assets/                       # Icono (.ico y .png)
 ├── tools/make_icon.py            # Genera assets/pizarra.ico
+├── tools/build_manual.py         # Genera «Manual de usuario.pdf» desde docs/manual.html
+├── docs/manual.html              # Texto del manual de usuario
+├── notas/                        # Notas de cada versión publicada (texto de la release)
 ├── pizarra_virtual/
 │   ├── main.py                   # Arranque: DPI, instancia única, registro de errores
-│   ├── app.py                    # Controlador: estado, historial, modos, capturas, bandeja, atajos
+│   ├── app.py                    # Controlador: estado, páginas, modos, efectos, sesiones, capturas, atajos
 │   ├── overlay.py                # Superposición por monitor: entrada de ratón/tableta y lienzo
-│   ├── render.py                 # Rasterizado de pinceles, pluma, destacador, goma y figuras
+│   ├── render.py                 # Rasterizado de pinceles, pluma, texto, figuras y pautas
+│   ├── session.py                # Páginas, sesiones .pizarra y exportación a PDF
 │   ├── toolbar.py                # Barra de herramientas flotante
 │   ├── hotkeys.py                # Atajos globales (RegisterHotKey)
 │   ├── capture.py                # Captura de pantalla y carpeta «Capturas Pizarra»

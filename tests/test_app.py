@@ -140,6 +140,4 @@ def test_settings_roundtrip(ctrl, qapp):
     try:
         assert other.tool == Tool.PEN and other.sizes[Tool.PEN] == 17
     finally:
-        for ov in other.overlays.values():
-            ov.close()
-        other.toolbar.close()
+        other.shutdown()

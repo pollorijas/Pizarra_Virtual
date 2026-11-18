@@ -17,8 +17,14 @@ pip install -r requirements.txt -r requirements-dev.txt || goto :error
 
 pyinstaller --noconfirm --clean PizarraVirtual.spec || goto :error
 
+rem Manual de usuario (PDF) y paquete .zip con el ejecutable y el manual
+set "QT_QPA_PLATFORM=offscreen"
+python tools\build_manual.py --out "dist\Manual de usuario.pdf" || goto :error
+set "QT_QPA_PLATFORM="
+powershell -NoProfile -Command "Compress-Archive -Force -Path 'dist\PizarraVirtual.exe','dist\Manual de usuario.pdf' -DestinationPath 'dist\PizarraVirtual.zip'" || goto :error
+
 echo.
-echo Listo: %CD%\dist\PizarraVirtual.exe
+echo Listo: %CD%\dist\PizarraVirtual.zip  (PizarraVirtual.exe + Manual de usuario.pdf)
 exit /b 0
 
 :error

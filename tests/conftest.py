@@ -28,7 +28,5 @@ def ctrl(qapp, tmp_path, monkeypatch):
     c.start()
     qapp.processEvents()
     yield c
-    for ov in list(c.overlays.values()):
-        ov.close()
-    c.toolbar.close()
+    c.shutdown()
     qapp.processEvents()

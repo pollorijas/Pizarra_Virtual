@@ -35,8 +35,21 @@ class ShapeItem:
 
 
 @dataclass
+class TextItem:
+    """Texto escrito con el teclado; (x, y) es la esquina superior izquierda."""
+
+    rgba: tuple[int, int, int, int]
+    size: float  # tamaño de letra en píxeles
+    opacity: float
+    x: float
+    y: float
+    text: str = ""
+    bold: bool = False
+
+
+@dataclass
 class ClearItem:
     """Borrado completo del lienzo (se puede deshacer)."""
 
 
-Item = StrokeItem | ShapeItem | ClearItem
+Item = StrokeItem | ShapeItem | TextItem | ClearItem

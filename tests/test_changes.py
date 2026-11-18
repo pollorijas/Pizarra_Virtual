@@ -63,7 +63,10 @@ def test_toolbar_resizes_even_with_stale_cached_sizes(ctrl, qapp):
         qapp.processEvents()
         assert tb.height() == sizes[name]
     assert sizes["pluma"] == sizes["pluma2"]
-    assert sizes["pluma"] < sizes["pincel"] and sizes["pluma"] < sizes["rect"]
+    if tb.horizontal:  # en dos columnas la altura la marca la columna más alta
+        assert sizes["pluma"] <= sizes["pincel"] and sizes["pluma"] <= sizes["rect"]
+    else:
+        assert sizes["pluma"] < sizes["pincel"] and sizes["pluma"] < sizes["rect"]
     poke()
     tb.toggle_collapsed()
     assert tb.height() < 60
@@ -329,4 +332,4 @@ def test_toolbar_uses_two_columns_when_screen_is_short(ctrl, qapp, monkeypatch):
     assert tb.horizontal and tb.frameGeometry().bottom() <= short.bottom()
     monkeypatch.undo()
     tb.update_orientation()
-    assert not tb.horizontal or real.height() < 700
+    assert not tb.horizontal or real.height() < 900  # una columna necesita ~820 px

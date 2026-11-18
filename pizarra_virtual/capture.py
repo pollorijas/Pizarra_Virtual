@@ -36,8 +36,9 @@ def grab_screen(screen: QScreen) -> QImage:
     return img
 
 
-def compose_drawing(shot: QImage, canvas: QImage | None, background: QColor | None) -> QImage:
-    """Pinta el fondo (si lo hay) y el lienzo encima de la captura, escalando a su tamaño."""
+def compose_drawing(shot: QImage, canvas: QImage | None, background: QColor | None,
+                    pattern: QImage | None = None) -> QImage:
+    """Pinta el fondo (si lo hay), la pauta y el lienzo encima de la captura, escalando a su tamaño."""
     if shot.isNull():
         return shot
     out = shot.copy()
@@ -46,6 +47,8 @@ def compose_drawing(shot: QImage, canvas: QImage | None, background: QColor | No
     p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
     if background is not None and background.alpha() > 0:
         p.fillRect(target, background)
+    if pattern is not None and not pattern.isNull():
+        p.drawImage(target, pattern, QRectF(0, 0, pattern.width(), pattern.height()))
     if canvas is not None and not canvas.isNull():
         p.drawImage(target, canvas, QRectF(0, 0, canvas.width(), canvas.height()))
     p.end()

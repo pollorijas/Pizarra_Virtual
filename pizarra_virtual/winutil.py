@@ -32,6 +32,10 @@ if IS_WINDOWS:
         _SetWindowLong.restype = ctypes.c_long
         _SetWindowLong.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_long]
     _GetWindowLong.argtypes = [wintypes.HWND, ctypes.c_int]
+    _user32.GetAsyncKeyState.argtypes = [ctypes.c_int]
+    _user32.GetAsyncKeyState.restype = ctypes.c_short
+    _user32.GetSystemMetrics.argtypes = [ctypes.c_int]
+    _user32.GetSystemMetrics.restype = ctypes.c_int
 
 
 def set_click_through(hwnd: int, enabled: bool) -> None:
@@ -61,6 +65,29 @@ def set_app_user_model_id(app_id: str) -> None:
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(app_id)
     except Exception:  # pragma: no cover
         log.debug("SetCurrentProcessExplicitAppUserModelID no disponible")
+
+
+def mouse_buttons() -> tuple[bool, bool]:
+    """Estado (izquierdo, derecho) del ratón en todo el sistema, aunque se haga clic en otra app.
+
+    Respeta la configuración de botones intercambiados (zurdos): devuelve los botones lógicos.
+    """
+    if not IS_WINDOWS:
+        return False, False
+    left_vk, right_vk = 0x01, 0x02
+    if _user32.GetSystemMetrics(23):  # SM_SWAPBUTTON
+        left_vk, right_vk = right_vk, left_vk
+    return bool(_user32.GetAsyncKeyState(left_vk) & 0x8000), bool(_user32.GetAsyncKeyState(right_vk) & 0x8000)
+
+
+def open_file(path: str) -> None:
+    if IS_WINDOWS:
+        os.startfile(path)  # type: ignore[attr-defined]  # noqa: S606
+        return
+    from PySide6.QtCore import QUrl
+    from PySide6.QtGui import QDesktopServices
+
+    QDesktopServices.openUrl(QUrl.fromLocalFile(path))
 
 
 def open_folder(path: str) -> None:

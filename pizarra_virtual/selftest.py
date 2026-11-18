@@ -57,6 +57,22 @@ def render_all_tools():
         p.end()
         results[tool.value] = painted(img)
 
+    # Texto (comprueba que hay fuentes disponibles en el ejecutable) y pautas
+    from .items import TextItem
+
+    img = blank()
+    p = QPainter(img)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    render.draw_text(p, TextItem((20, 20, 20, 255), 28, 1.0, 10, 10, "Pizarra ñ 123"))
+    p.end()
+    results["text"] = painted(img)
+    for pattern in ("grid", "ruled", "calligraphy", "cartesian", "staff"):
+        img = blank()
+        p = QPainter(img)
+        render.draw_pattern(p, img.width(), img.height(), pattern, "white")
+        p.end()
+        results[f"pattern:{pattern}"] = painted(img)
+
     # La goma debe borrar lo pintado
     img = blank()
     img.fill(Qt.GlobalColor.black)

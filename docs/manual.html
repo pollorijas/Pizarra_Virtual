@@ -1,0 +1,369 @@
+<html>
+<head><meta charset="utf-8"><title>Pizarra Virtual — Manual de usuario</title></head>
+<body>
+
+<table width="100%" cellpadding="0" cellspacing="0"><tr>
+<td width="90"><img src="icono.png" width="72" height="72"></td>
+<td><h1 style="margin:0">Pizarra Virtual</h1>
+<p style="font-size:13pt; color:#3b5b8c; margin:0">Manual de usuario · versión {VERSION}</p></td>
+</tr></table>
+
+<p>Pizarra Virtual es una pizarra transparente que se coloca <b>encima de todo el escritorio de
+Windows 10 y 11</b>. Permite dibujar, escribir, resaltar y señalar sobre cualquier programa abierto
+(una presentación, un PDF, una página web, un vídeo, un documento) y está pensada para <b>dar clase y
+presentar</b>: incluye foco, cortina, puntero láser, zoom, resaltado del cursor, pautas de escritura,
+varias páginas, guardado de la clase y exportación a PDF.</p>
+
+<h2>Índice</h2>
+<ol>
+<li>Instalación y primer uso</li>
+<li>Modos de trabajo: «Dibujando» y «Ratón libre»</li>
+<li>La barra de herramientas</li>
+<li>Herramientas de dibujo</li>
+<li>Texto</li>
+<li>Color, grosor y opacidad</li>
+<li>Fondos y pautas</li>
+<li>Herramientas de presentación: foco, cortina, resaltar cursor, láser y zoom</li>
+<li>Páginas</li>
+<li>Guardar, abrir y exportar a PDF</li>
+<li>Capturas de pantalla</li>
+<li>Deshacer, rehacer y borrar</li>
+<li>Varios monitores, escalado y tabletas</li>
+<li>Atajos de teclado</li>
+<li>Ideas para usarla en clase</li>
+<li>Solución de problemas</li>
+<li>Archivos y carpetas</li>
+</ol>
+
+<!-- ================================================================== -->
+<h2 style="page-break-before: always">1. Instalación y primer uso</h2>
+<ol>
+<li>Descomprime el archivo <b>PizarraVirtual-v{VERSION}.zip</b> en una carpeta (por ejemplo en
+<i>Documentos</i>). Contiene <b>PizarraVirtual.exe</b> y este manual. No hace falta instalar nada.</li>
+<li>Haz doble clic en <b>PizarraVirtual.exe</b>. La primera vez Windows SmartScreen puede mostrar
+«Windows protegió su PC» porque el programa no está firmado digitalmente: pulsa
+<i>Más información → Ejecutar de todas formas</i>.</li>
+<li>Aparecen la <b>barra de herramientas</b> flotante (a la izquierda) y un icono en el área de
+notificación, junto al reloj. La pizarra arranca en modo <b>Dibujando</b>: ya puedes dibujar.</li>
+<li>Para salir, pulsa el botón de apagado de la barra o elige <i>Salir</i> en el menú del icono del
+área de notificación. Si hay cambios sin guardar, el programa pregunta si quieres guardarlos.</li>
+</ol>
+<p>Requisitos: Windows 10 (versión 1809 o posterior) o Windows 11, de 64 bits. Funciona con ratón,
+pantalla táctil, pizarra digital interactiva y tabletas o lápices con presión (Wacom, Surface Pen,
+Windows Ink).</p>
+
+<!-- ================================================================== -->
+<h2>2. Modos de trabajo: «Dibujando» y «Ratón libre»</h2>
+<p>La pizarra tiene dos modos, que se alternan con el botón grande de la barra o con
+<b>Ctrl+Alt+D</b> desde cualquier programa:</p>
+<table border="1" cellpadding="5" cellspacing="0" width="100%">
+<tr bgcolor="#e8eef7"><th>Modo</th><th>Qué ocurre</th></tr>
+<tr><td><b>Dibujando</b></td><td>El ratón dibuja sobre la pantalla con la herramienta elegida. Los
+programas de debajo no reciben los clics.</td></tr>
+<tr><td><b>Ratón libre</b></td><td>Lo dibujado sigue visible, pero los clics llegan a los programas
+de debajo: puedes pasar diapositivas, desplazar un documento o abrir otra ventana sin borrar nada.</td></tr>
+</table>
+<p>Además, <b>Ctrl+Alt+H</b> (o el botón del ojo) <b>oculta o muestra</b> toda la pizarra. <b>Esc</b>
+pasa a «Ratón libre» (o sale del zoom si está activo).</p>
+
+<!-- ================================================================== -->
+<h2 style="page-break-before: always">3. La barra de herramientas</h2>
+<table width="100%" cellpadding="6" cellspacing="0"><tr>
+<td width="110" valign="top"><img src="barra.png" width="96"></td>
+<td valign="top">
+<p>De arriba abajo:</p>
+<ul>
+<li><b>Cabecera «Pizarra»</b>: arrástrala para mover la barra a cualquier lugar o monitor. La flecha
+⌃ la <b>pliega</b> (queda solo la cabecera) y la despliega. La barra recuerda su posición y si
+estaba plegada.</li>
+<li><b>Dibujando / Ratón libre</b>: cambia de modo.</li>
+<li><b>Herramientas</b>: pincel, lápiz, pluma, destacador, goma, texto, láser, rectángulo, elipse,
+triángulo, línea y flecha.</li>
+<li><b>Opciones de la herramienta</b>: tipo de pincel, relleno de figuras o negrita (según la
+herramienta).</li>
+<li><b>Color</b>: el botón grande abre el selector de color; debajo, 12 colores rápidos.</li>
+<li><b>Grosor</b> (o tamaño de letra) y <b>opacidad</b>.</li>
+<li><b>Fondo</b> y <b>pauta</b> de la página.</li>
+<li><b>Presentación</b>: foco, cortina y resaltar cursor.</li>
+<li><b>Páginas</b>: anterior, siguiente y página nueva.</li>
+<li><b>Acciones</b>: deshacer, rehacer, borrar · zoom, captura de pantalla, sesión (abrir, guardar,
+PDF) · ocultar, ayuda y manual, salir.</li>
+</ul>
+<p>Si la pantalla no es lo bastante alta (por ejemplo, un portátil de 1366×768 con escalado del
+125–150 %), la barra se coloca automáticamente en <b>dos columnas</b> para que quepa entera.</p>
+<p>Pasa el ratón por encima de cualquier botón para ver su nombre y su atajo de teclado.</p>
+</td></tr></table>
+
+<!-- ================================================================== -->
+<h2 style="page-break-before: always">4. Herramientas de dibujo</h2>
+<p><img src="ejemplo.png" width="560"></p>
+<table border="1" cellpadding="5" cellspacing="0" width="100%">
+<tr bgcolor="#e8eef7"><th width="22%">Herramienta</th><th width="11%">Tecla</th><th>Uso</th></tr>
+<tr><td><b>Pincel</b></td><td>1</td><td>Trazo libre de 1 a 150 px. Cuatro tipos (botón
+desplegable o tecla <b>B</b>): <b>Duro</b> (borde nítido), <b>Suave</b> (bordes difuminados),
+<b>Aerógrafo</b> (spray) y <b>Caligráfico</b> (punta plana inclinada).</td></tr>
+<tr><td><b>Lápiz</b></td><td>2</td><td>Trazo fino (1 a 8 px), para anotar con precisión.</td></tr>
+<tr><td><b>Pluma</b></td><td>3</td><td>Imita una pluma estilográfica: curva suave, entrada y salida
+afinadas y grosor variable. Con una tableta usa la <b>presión</b> real; con ratón, la presión se
+simula con la <b>velocidad</b> (despacio = trazo pleno, rápido = más fino). Un estabilizador
+elimina el temblor del pulso.</td></tr>
+<tr><td><b>Destacador</b></td><td>4</td><td>Trazo ancho y semitransparente para resaltar texto,
+como un rotulador fluorescente. No se oscurece al repasar dentro del mismo trazo.</td></tr>
+<tr><td><b>Goma</b></td><td>5</td><td>Borra lo dibujado (de 4 a 250 px). Con un lápiz de tableta, el
+extremo «goma» del lápiz borra directamente.</td></tr>
+<tr><td><b>Texto</b></td><td>T</td><td>Escribir con el teclado. Ver la sección 5.</td></tr>
+<tr><td><b>Láser</b></td><td>L</td><td>Puntero luminoso que sigue al ratón; al arrastrar deja una
+<b>tinta temporal</b> que desaparece sola a los dos segundos. Ver la sección 8.</td></tr>
+<tr><td><b>Rectángulo</b></td><td>6</td><td rowspan="5">Se dibujan arrastrando desde un extremo al
+opuesto. Con <b>Mayús</b> pulsada: cuadrado, círculo, triángulo proporcionado o líneas y flechas en
+ángulos de 15°. El rectángulo, la elipse y el triángulo pueden ser <b>rellenos</b> (botón
+«Relleno» o tecla <b>R</b>). El triángulo apunta hacia donde empezaste a arrastrar.</td></tr>
+<tr><td><b>Elipse / círculo</b></td><td>7</td></tr>
+<tr><td><b>Triángulo</b></td><td>8</td></tr>
+<tr><td><b>Línea</b></td><td>9</td></tr>
+<tr><td><b>Flecha</b></td><td>0</td></tr>
+</table>
+<p><b>Clic derecho</b> mientras dibujas cancela el trazo o la figura en curso.</p>
+
+<!-- ================================================================== -->
+<h2>5. Texto</h2>
+<ol>
+<li>Elige la herramienta <b>Texto</b> (tecla <b>T</b>) y haz clic donde quieras escribir.</li>
+<li>Escribe con el teclado. Se admiten tildes, ñ y cualquier carácter. <b>Intro</b> crea una nueva
+línea, <b>Retroceso</b> borra y <b>Ctrl+V</b> pega texto copiado.</li>
+<li>Termina con <b>Esc</b>, <b>Ctrl+Intro</b> o haciendo clic en otro lugar (eso empieza un texto
+nuevo). Mientras escribes, las teclas no activan atajos: puedes escribir números y letras sin
+cambiar de herramienta.</li>
+</ol>
+<p>El control deslizante muestra el <b>tamaño de letra</b> (10 a 160 px). El color, el tamaño y la
+<b>negrita</b> se pueden cambiar mientras se escribe y se aplican al texto en curso.</p>
+
+<!-- ================================================================== -->
+<h2>6. Color, grosor y opacidad</h2>
+<ul>
+<li><b>Color</b>: haz clic en un color rápido o en el botón grande (o pulsa <b>C</b>) para elegir
+cualquier color.</li>
+<li><b>Grosor</b>: control deslizante, teclas <b>+</b> y <b>-</b>, o la <b>rueda del ratón</b> sobre
+la pizarra. Cada herramienta recuerda su propio grosor.</li>
+<li><b>Opacidad</b>: control deslizante o <b>Mayús + rueda</b>. El destacador empieza al 40 %.</li>
+</ul>
+<p>El cursor muestra el tamaño real del pincel o la goma, para saber exactamente qué vas a pintar.</p>
+
+<!-- ================================================================== -->
+<h2 style="page-break-before: always">7. Fondos y pautas</h2>
+<p>Cada página tiene un <b>fondo</b> y una <b>pauta</b>, que se eligen en los dos desplegables de la
+barra:</p>
+<table border="1" cellpadding="5" cellspacing="0" width="100%">
+<tr bgcolor="#e8eef7"><th width="30%">Fondo</th><th>Uso</th></tr>
+<tr><td>Transparente</td><td>Se dibuja directamente sobre el escritorio y los programas.</td></tr>
+<tr><td>Oscurecer escritorio</td><td>Atenúa lo que hay detrás para que destaque lo dibujado.</td></tr>
+<tr><td>Pizarra blanca</td><td>Hoja en blanco a pantalla completa.</td></tr>
+<tr><td>Pizarra verde</td><td>Pizarra tradicional de tiza.</td></tr>
+</table>
+<p><img src="pautas.png" width="560"></p>
+<table border="1" cellpadding="5" cellspacing="0" width="100%">
+<tr bgcolor="#e8eef7"><th width="30%">Pauta</th><th>Uso en clase</th></tr>
+<tr><td>Cuadrícula</td><td>Matemáticas, geometría, dibujo técnico, tablas.</td></tr>
+<tr><td>Hoja rayada</td><td>Redacción, dictados, toma de notas (con margen rojo).</td></tr>
+<tr><td>Pauta de caligrafía</td><td>Enseñar a escribir: cuatro líneas (ascendentes, altura de la
+«x» discontinua, línea base marcada y descendentes).</td></tr>
+<tr><td>Plano cartesiano</td><td>Funciones, coordenadas y gráficas, con ejes numerados.</td></tr>
+<tr><td>Pentagrama</td><td>Música: notas, claves y ritmos.</td></tr>
+</table>
+<p>Las pautas también se dibujan sobre el fondo transparente, se incluyen en las capturas «con
+trazado» y en el PDF exportado.</p>
+
+<!-- ================================================================== -->
+<h2 style="page-break-before: always">8. Herramientas de presentación</h2>
+<p>Sirven para dirigir la atención del grupo. No modifican lo dibujado ni se guardan.</p>
+<p><img src="presentacion.png" width="560"></p>
+<h3>Foco (F · Ctrl+Alt+F)</h3>
+<p>Oscurece toda la pantalla excepto un círculo de luz que sigue al ratón. Ideal para que todos miren
+el mismo punto de un documento o de una imagen. <b>Alt + rueda</b> cambia el tamaño del círculo.
+Funciona también en «Ratón libre», mientras se usa otro programa.</p>
+<h3>Cortina (V)</h3>
+<p>Tapa la pantalla desde arriba y se descubre poco a poco: perfecto para mostrar una pregunta antes
+que la respuesta, o un texto párrafo a párrafo. <b>Arrastra</b> la cortina con el ratón o usa las
+flechas <b>↓</b> (descubrir) y <b>↑</b> (volver a tapar). Se activa sobre el monitor donde está el
+cursor. Por encima de la cortina se puede seguir dibujando.</p>
+<h3>Resaltar cursor y clics (M · Ctrl+Alt+M)</h3>
+<p>Muestra un círculo amarillo alrededor del puntero y una onda en cada clic: <b>roja</b> para el
+botón izquierdo y <b>azul</b> para el derecho. Ayuda a que el grupo siga el ratón en el proyector y
+es muy útil al grabar tutoriales. Funciona también al hacer clic en otros programas.</p>
+<h3>Puntero láser y tinta temporal (L)</h3>
+<p>El cursor se convierte en un punto luminoso del color elegido. Al arrastrar se dibuja un trazo
+brillante que permanece un momento y se desvanece solo: sirve para subrayar o rodear algo sin tener
+que borrarlo después.</p>
+<h3>Zoom (Z · Ctrl+Alt+Z)</h3>
+<p>Congela la pantalla donde está el cursor y la amplía al doble. La <b>rueda</b> acerca o aleja (de
+1× a 10×, centrado en el cursor), <b>clic derecho o central y arrastrar</b> mueve la vista,
+<b>Ctrl + rueda</b> cambia el grosor y <b>Esc</b> sale. Se puede dibujar o escribir sobre la vista
+ampliada: al salir, los trazos quedan exactamente sobre el contenido real. Mientras dura el zoom la
+imagen está congelada (los vídeos no avanzan).</p>
+
+<!-- ================================================================== -->
+<h2 style="page-break-before: always">9. Páginas</h2>
+<p>Una clase puede tener varias páginas, como una presentación. Cada página conserva sus dibujos,
+su historial de deshacer, su fondo y su pauta.</p>
+<ul>
+<li><b>Página nueva</b>: botón con el signo + o tecla <b>N</b>. Se crea después de la actual, en
+blanco, con el mismo fondo y pauta.</li>
+<li><b>Siguiente / anterior</b>: botones de flecha o teclas <b>AvPág / RePág</b> (las que envían la
+mayoría de los presentadores inalámbricos o «clickers»).</li>
+<li><b>Eliminar esta página</b>: en el menú de sesión (botón del documento).</li>
+</ul>
+<p>La barra indica «PÁGINA n DE m».</p>
+
+<!-- ================================================================== -->
+<h2>10. Guardar, abrir y exportar a PDF</h2>
+<p>El botón del documento (o los atajos) abre el menú de sesión:</p>
+<table border="1" cellpadding="5" cellspacing="0" width="100%">
+<tr bgcolor="#e8eef7"><th width="34%">Opción</th><th width="18%">Atajo</th><th>Qué hace</th></tr>
+<tr><td>Guardar sesión</td><td>Ctrl+S</td><td>Guarda todas las páginas en un archivo
+<b>.pizarra</b> (por defecto en <i>Documentos\Pizarra Virtual</i>). Así puedes preparar la clase en
+casa y abrirla en el aula.</td></tr>
+<tr><td>Guardar sesión como…</td><td>Ctrl+Shift+S</td><td>Guarda una copia con otro nombre.</td></tr>
+<tr><td>Abrir sesión…</td><td>Ctrl+O</td><td>Abre un archivo .pizarra. Si lo abres en otro equipo
+con otros monitores, los dibujos se colocan en la pantalla principal.</td></tr>
+<tr><td>Exportar a PDF…</td><td>Ctrl+P</td><td>Crea un PDF con una página por cada página de la
+pizarra, para entregar los apuntes a los alumnos. Con fondo transparente se usa papel blanco.</td></tr>
+</table>
+<p>Al salir o abrir otra sesión con cambios sin guardar, el programa pregunta si quieres
+guardarlos.</p>
+
+<!-- ================================================================== -->
+<h2>11. Capturas de pantalla</h2>
+<p>El botón de la cámara ofrece: pantalla actual <b>con</b> trazado (<b>Ctrl+Alt+S</b>), pantalla
+actual <b>sin</b> trazado (<b>Ctrl+Alt+Shift+S</b>), y todas las pantallas con o sin trazado. La
+«pantalla actual» es la del monitor donde está el cursor. Las capturas se guardan en PNG en
+<b>%USERPROFILE%\Pictures\Capturas Pizarra</b> (la carpeta <i>Imágenes › Capturas Pizarra</i>) y
+también se copian al portapapeles, listas para pegar en otro programa. Durante el zoom se guarda la
+vista ampliada.</p>
+
+<!-- ================================================================== -->
+<h2>12. Deshacer, rehacer y borrar</h2>
+<ul>
+<li><b>Ctrl+Z</b> deshace y <b>Ctrl+Y</b> (o <b>Ctrl+Shift+Z</b>) rehace, sin límite, en la página
+actual (también la goma, el texto y «Borrar todo»).</li>
+<li><b>Supr</b> o el botón de la papelera borra toda la página actual (se puede deshacer).</li>
+</ul>
+
+<!-- ================================================================== -->
+<h2 style="page-break-before: always">13. Varios monitores, escalado y tabletas</h2>
+<ul>
+<li>La pizarra cubre <b>todos los monitores</b>; cada uno se dibuja a su resolución real, aunque
+tengan escalados distintos (100 %, 125 %, 150 %…). Se pueden conectar o desconectar monitores con
+el programa abierto.</li>
+<li>La barra se puede llevar a cualquier monitor; si en ese monitor no cabe a lo alto, pasa a dos
+columnas.</li>
+<li>Con tabletas y lápices con presión, el pincel, el lápiz, el destacador y la pluma varían su
+grosor con la presión, y el extremo goma del lápiz borra.</li>
+<li>En pantallas táctiles y pizarras digitales se dibuja con el dedo o el lápiz del panel.</li>
+</ul>
+
+<!-- ================================================================== -->
+<h2>14. Atajos de teclado</h2>
+<h3>Globales (funcionan desde cualquier programa)</h3>
+<table border="1" cellpadding="4" cellspacing="0" width="100%">
+<tr bgcolor="#e8eef7"><th width="34%">Atajo</th><th>Acción</th></tr>
+<tr><td>Ctrl+Alt+D</td><td>Activar / desactivar el dibujo («Dibujando» ↔ «Ratón libre»)</td></tr>
+<tr><td>Ctrl+Alt+H</td><td>Mostrar / ocultar la pizarra</td></tr>
+<tr><td>Ctrl+Alt+Z</td><td>Zoom de la zona bajo el cursor</td></tr>
+<tr><td>Ctrl+Alt+F</td><td>Foco</td></tr>
+<tr><td>Ctrl+Alt+M</td><td>Resaltar cursor y clics</td></tr>
+<tr><td>Ctrl+Alt+S</td><td>Captura de la pantalla actual con trazado</td></tr>
+<tr><td>Ctrl+Alt+Shift+S</td><td>Captura de la pantalla actual sin trazado</td></tr>
+</table>
+<h3>Con la pizarra activa</h3>
+<table border="1" cellpadding="4" cellspacing="0" width="100%">
+<tr bgcolor="#e8eef7"><th width="34%">Atajo</th><th>Acción</th></tr>
+<tr><td>1 · 2 · 3 · 4 · 5</td><td>Pincel · Lápiz · Pluma · Destacador · Goma</td></tr>
+<tr><td>6 · 7 · 8 · 9 · 0</td><td>Rectángulo · Elipse · Triángulo · Línea · Flecha</td></tr>
+<tr><td>T · L</td><td>Texto · Puntero láser / tinta temporal</td></tr>
+<tr><td>B</td><td>Cambiar el tipo de pincel</td></tr>
+<tr><td>R</td><td>Figuras rellenas sí / no</td></tr>
+<tr><td>C</td><td>Elegir color</td></tr>
+<tr><td>+ / - · rueda</td><td>Aumentar / reducir grosor (tamaño de letra con Texto)</td></tr>
+<tr><td>Mayús + rueda</td><td>Opacidad</td></tr>
+<tr><td>Mayús al arrastrar</td><td>Cuadrado, círculo, triángulo proporcionado, ángulos de 15°</td></tr>
+<tr><td>Clic derecho</td><td>Cancelar el trazo o figura en curso</td></tr>
+<tr><td>F · V · M</td><td>Foco · Cortina · Resaltar cursor y clics</td></tr>
+<tr><td>↓ / ↑</td><td>Descubrir / tapar con la cortina</td></tr>
+<tr><td>Alt + rueda</td><td>Tamaño del foco</td></tr>
+<tr><td>Z</td><td>Zoom (activar / salir)</td></tr>
+<tr><td>Esc</td><td>Salir del zoom; si no hay zoom, pasar a «Ratón libre»</td></tr>
+<tr><td>AvPág / RePág · N</td><td>Página siguiente / anterior · Página nueva</td></tr>
+<tr><td>Ctrl+Z · Ctrl+Y</td><td>Deshacer · Rehacer</td></tr>
+<tr><td>Supr</td><td>Borrar la página</td></tr>
+<tr><td>Ctrl+S · Ctrl+Shift+S · Ctrl+O · Ctrl+P</td><td>Guardar · Guardar como · Abrir · Exportar
+a PDF</td></tr>
+<tr><td>F1</td><td>Ayuda rápida con los atajos</td></tr>
+</table>
+<h3>En el zoom</h3>
+<table border="1" cellpadding="4" cellspacing="0" width="100%">
+<tr><td width="34%">Rueda</td><td>Acercar / alejar</td></tr>
+<tr><td>Clic derecho o central + arrastrar</td><td>Mover la vista</td></tr>
+<tr><td>Ctrl + rueda</td><td>Grosor de la herramienta</td></tr>
+<tr><td>Esc · Z</td><td>Salir del zoom</td></tr>
+</table>
+<h3>Escribiendo texto</h3>
+<table border="1" cellpadding="4" cellspacing="0" width="100%">
+<tr><td width="34%">Intro</td><td>Nueva línea</td></tr>
+<tr><td>Esc · Ctrl+Intro · clic fuera</td><td>Terminar el texto</td></tr>
+<tr><td>Retroceso · Ctrl+V · Tab</td><td>Borrar · Pegar · Sangría</td></tr>
+</table>
+
+<!-- ================================================================== -->
+<h2 style="page-break-before: always">15. Ideas para usarla en clase</h2>
+<table border="1" cellpadding="5" cellspacing="0" width="100%">
+<tr bgcolor="#e8eef7"><th width="30%">Situación</th><th>Cómo hacerlo</th></tr>
+<tr><td>Comentar un texto o un PDF</td><td>Fondo transparente, <b>destacador</b> para subrayar,
+<b>pluma</b> para anotar al margen y <b>Ratón libre</b> (Esc) para desplazar el documento.</td></tr>
+<tr><td>Que todos miren el mismo punto</td><td><b>Foco</b> (F) sobre la frase o la parte de la
+imagen; <b>zoom</b> (Z) si los detalles son pequeños.</td></tr>
+<tr><td>Preguntas y respuestas</td><td>Escribe la pregunta arriba y la respuesta abajo; activa la
+<b>cortina</b> (V) y descúbrela con ↓ cuando la clase haya respondido.</td></tr>
+<tr><td>Explicar paso a paso</td><td>Una <b>página</b> por paso (N) y pasa de una a otra con el
+presentador (AvPág).</td></tr>
+<tr><td>Enseñar a escribir</td><td>Pizarra blanca + <b>pauta de caligrafía</b> y la pluma o el
+pincel caligráfico.</td></tr>
+<tr><td>Matemáticas</td><td><b>Plano cartesiano</b> o cuadrícula, figuras con Mayús para ángulos
+exactos y texto para fórmulas.</td></tr>
+<tr><td>Señalar sin ensuciar</td><td><b>Láser</b> (L): la tinta desaparece sola.</td></tr>
+<tr><td>Demostrar un programa</td><td><b>Resaltar cursor y clics</b> (M) para que se vea dónde se
+hace clic.</td></tr>
+<tr><td>Preparar y compartir</td><td>Prepara la clase en casa y <b>guárdala</b> (Ctrl+S); al terminar,
+<b>exporta a PDF</b> (Ctrl+P) y compártelo con el grupo.</td></tr>
+</table>
+
+<!-- ================================================================== -->
+<h2>16. Solución de problemas</h2>
+<ul>
+<li><b>No puedo hacer clic en mis programas</b>: estás en «Dibujando» (o en el zoom). Pulsa
+<b>Esc</b> o <b>Ctrl+Alt+D</b>.</li>
+<li><b>Un atajo global no funciona</b>: otro programa lo está usando; la pizarra lo avisa al
+arrancar. Usa el botón equivalente de la barra o del icono del área de notificación.</li>
+<li><b>Las teclas no hacen nada</b>: la barra de herramientas debe estar activa; haz clic en ella
+o en la pizarra.</li>
+<li><b>SmartScreen o el antivirus avisan</b>: el ejecutable no está firmado. Elige
+<i>Más información → Ejecutar de todas formas</i>.</li>
+<li><b>Tarda unos segundos en abrir</b>: es normal la primera vez, porque el programa se
+descomprime en una carpeta temporal.</li>
+<li><b>No veo la barra</b>: puede estar plegada u oculta; haz clic en el icono del área de
+notificación o pulsa <b>Ctrl+Alt+H</b>.</li>
+</ul>
+
+<!-- ================================================================== -->
+<h2>17. Archivos y carpetas</h2>
+<table border="1" cellpadding="4" cellspacing="0" width="100%">
+<tr><td width="34%">Capturas</td><td>%USERPROFILE%\Pictures\Capturas Pizarra</td></tr>
+<tr><td>Sesiones y PDF (por defecto)</td><td>Documentos\Pizarra Virtual</td></tr>
+<tr><td>Registro de errores</td><td>%LOCALAPPDATA%\PizarraVirtual\pizarra.log</td></tr>
+<tr><td>Ajustes (herramienta, colores, posición de la barra…)</td><td>Registro de Windows,
+HKEY_CURRENT_USER\Software\PizarraVirtual</td></tr>
+</table>
+<p style="color:#666">Pizarra Virtual {VERSION} · Licencia GNU GPL v2 · Usa Qt for Python (PySide6)
+bajo licencia LGPL v3.</p>
+
+</body>
+</html>
