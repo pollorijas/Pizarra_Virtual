@@ -220,8 +220,10 @@ git tag v1.2.0
 git push origin v1.2.0
 ```
 
-El flujo vuelve a pasar todas las pruebas y, solo si todo va bien, publica la release con
-`PizarraVirtual.exe`.
+También se puede publicar sin crear la etiqueta a mano: en **Actions → Compilar PizarraVirtual.exe →
+Run workflow**, escribe la versión (p. ej. `v1.2.0`) en el campo *version*; el flujo crea la etiqueta
+sobre ese commit. En ambos casos vuelve a pasar todas las pruebas y, solo si todo va bien, publica la
+release con `PizarraVirtual.exe`.
 
 > PyInstaller no compila de forma cruzada: el `.exe` de Windows debe generarse en Windows (en tu PC o
 > en el runner de GitHub Actions).

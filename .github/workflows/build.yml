@@ -6,6 +6,11 @@ on:
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Publicar como release con esta versión (p. ej. v1.1.0). Vacío = solo compilar."
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -66,11 +71,14 @@ jobs:
           name: PizarraVirtual-exe
           path: dist/PizarraVirtual.exe
 
-      - name: Publicar release (solo en etiquetas v*)
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Publicar release (etiqueta v* o versión indicada al lanzarlo a mano)
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.version != '')
         uses: softprops/action-gh-release@v2
         with:
-          name: Pizarra Virtual ${{ github.ref_name }}
-          body_path: notas/${{ github.ref_name }}.md
+          # Si la etiqueta no existe, se crea sobre el commit compilado.
+          tag_name: ${{ inputs.version || github.ref_name }}
+          target_commitish: ${{ github.sha }}
+          name: Pizarra Virtual ${{ inputs.version || github.ref_name }}
+          body_path: notas/${{ inputs.version || github.ref_name }}.md
           files: dist/PizarraVirtual.exe
           generate_release_notes: true
