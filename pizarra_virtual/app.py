@@ -13,7 +13,7 @@ from PySide6.QtWidgets import QApplication, QFileDialog, QMenu, QMessageBox, QSy
 
 from . import __version__, capture, icons, session, winutil
 from .hotkeys import MOD_ALT, MOD_CONTROL, MOD_SHIFT, GlobalHotkeys
-from .items import ClearItem
+from .items import ClearItem, TextEditItem
 from .overlay import Overlay, make_tool_cursor, now_ms
 from .session import Page
 from .toolbar import Toolbar
@@ -27,6 +27,7 @@ EFFECTS_INTERVAL_MS = 16
 VK_D, VK_F, VK_H, VK_M, VK_S, VK_Z = 0x44, 0x46, 0x48, 0x4D, 0x53, 0x5A
 
 SPOTLIGHT_MIN, SPOTLIGHT_MAX, SPOTLIGHT_DEFAULT = 60, 600, 170
+SPOTLIGHT_SHAPES = {"circle": "Círculo", "rect": "Rectángulo"}
 MANUAL_NAME = "Manual de usuario.pdf"
 
 
@@ -78,6 +79,7 @@ class Controller(QObject):
         self.fill_shapes = False
         self.text_bold = False
         self.spotlight_radius = SPOTLIGHT_DEFAULT
+        self.spotlight_shape = "circle"  # "circle" o "rect" (franja, p. ej. para leer línea a línea)
         self._load_settings()
 
         # Estado de la aplicación
@@ -287,6 +289,7 @@ class Controller(QObject):
 
     def set_opacity(self, value: int) -> None:
         self.opacities[self.tool] = max(5, min(100, int(value)))
+        self._restyle_text()
         self._changed()
 
     def step_opacity(self, direction: int) -> None:
@@ -303,7 +306,17 @@ class Controller(QObject):
 
     def _restyle_text(self) -> None:
         if self.text_editor is not None:
-            self.text_editor.restyle_text(self.color.getRgb(), float(self.sizes[Tool.TEXT]), self.text_bold)
+            self.text_editor.restyle_text(self.color.getRgb(), float(self.sizes[Tool.TEXT]), self.text_bold,
+                                          self.opacities[Tool.TEXT] / 100.0)
+
+    def adopt_text_style(self, item) -> None:
+        """Al abrir un texto ya escrito, la barra muestra su color, tamaño, opacidad y negrita."""
+        spec = TOOL_SPECS[Tool.TEXT]
+        self.color = QColor(*item.rgba[:3])
+        self.sizes[Tool.TEXT] = max(spec.min_size, min(spec.max_size, int(round(item.size))))
+        self.opacities[Tool.TEXT] = max(5, min(100, int(round(item.opacity * 100))))
+        self.text_bold = bool(item.bold)
+        self._changed(cursor=True)
 
     # ---- fondo y pauta (de la página actual)
 
@@ -486,6 +499,17 @@ class Controller(QObject):
             self._set_visible(True)
         self._changed(repaint=True)
 
+    def set_spotlight_shape(self, shape: str) -> None:
+        if shape in SPOTLIGHT_SHAPES and shape != self.spotlight_shape:
+            self.spotlight_shape = shape
+            self._changed(repaint=True)
+
+    def toggle_spotlight_shape(self) -> None:
+        """Cambia la forma del foco (círculo ↔ rectángulo) y lo activa si estaba apagado."""
+        self.set_spotlight_shape("rect" if self.spotlight_shape == "circle" else "circle")
+        if not self.spotlight:
+            self.toggle_spotlight()
+
     def step_spotlight(self, direction: int) -> None:
         r = self.spotlight_radius * (1.15 if direction > 0 else 1 / 1.15)
         self.spotlight_radius = int(max(SPOTLIGHT_MIN, min(SPOTLIGHT_MAX, r)))
@@ -598,8 +622,8 @@ class Controller(QObject):
     def redo_stack(self) -> list:
         return self.page.redo
 
-    def items_for(self, key: str):
-        return [item for k, item in self.history if k is None or k == key]
+    def items_for(self, key: str, exclude_uid: str | None = None):
+        return self.page.items_for(key, exclude_uid)
 
     def push(self, key: str, item) -> None:
         self.history.append((key, item))
@@ -631,6 +655,9 @@ class Controller(QObject):
         key, item = self.redo_stack.pop()
         self.history.append((key, item))
         self.dirty = True
+        if isinstance(item, TextEditItem):  # sustituye a un texto anterior: hay que redibujar
+            self._rebuild(key)
+            return
         for k, ov in self.overlays.items():
             if key is None or key == k:
                 ov.apply_item(item)
@@ -746,7 +773,7 @@ class Controller(QObject):
             used = [k for k in keys if any(key == k for key, _ in page.history)] or keys[:1]
             for key in used:
                 ov = self.overlays[key]
-                items = [item for k, item in page.history if k is None or k == key]
+                items = page.items_for(key)
                 images.append(session.render_page(page, items, ov.width(), ov.height()))
         return images
 
@@ -892,9 +919,11 @@ class Controller(QObject):
         self._tray_visible.triggered.connect(lambda _c: self.toggle_visible())
         self._tray_spot = QAction("Foco\tCtrl+Alt+F", menu, checkable=True)
         self._tray_spot.triggered.connect(lambda _c: self.toggle_spotlight())
+        self._tray_spot_rect = QAction("Foco rectangular\tShift+F", menu, checkable=True)
+        self._tray_spot_rect.triggered.connect(lambda on: self.set_spotlight_shape("rect" if on else "circle"))
         self._tray_highlight = QAction("Resaltar cursor y clics\tCtrl+Alt+M", menu, checkable=True)
         self._tray_highlight.triggered.connect(lambda _c: self.toggle_highlight())
-        for act in (self._tray_draw, self._tray_visible, self._tray_spot, self._tray_highlight):
+        for act in (self._tray_draw, self._tray_visible, self._tray_spot, self._tray_spot_rect, self._tray_highlight):
             menu.addAction(act)
         zoom_act = QAction("Zoom de pantalla\tCtrl+Alt+Z", menu)
         zoom_act.triggered.connect(self.toggle_zoom)
@@ -932,6 +961,7 @@ class Controller(QObject):
         self._tray_draw.setChecked(self.drawing and self.visible)
         self._tray_visible.setChecked(self.visible)
         self._tray_spot.setChecked(self.spotlight)
+        self._tray_spot_rect.setChecked(self.spotlight_shape == "rect")
         self._tray_highlight.setChecked(self.highlight)
 
     def _on_tray_activated(self, reason) -> None:
@@ -997,6 +1027,8 @@ class Controller(QObject):
             self.page.pattern = pat if pat in PATTERNS else "none"
             self.spotlight_radius = max(SPOTLIGHT_MIN, min(SPOTLIGHT_MAX, int(s.value("spotlight_radius",
                                                                                     SPOTLIGHT_DEFAULT))))
+            shape = str(s.value("spotlight_shape", "circle"))
+            self.spotlight_shape = shape if shape in SPOTLIGHT_SHAPES else "circle"
         except Exception:  # ajustes corruptos: se usan los valores por defecto
             log.exception("Ajustes no válidos; se usan los valores por defecto")
 
@@ -1012,6 +1044,7 @@ class Controller(QObject):
         s.setValue("background", self.background)
         s.setValue("pattern", self.pattern)
         s.setValue("spotlight_radius", self.spotlight_radius)
+        s.setValue("spotlight_shape", self.spotlight_shape)
         s.sync()
 
 
@@ -1040,12 +1073,14 @@ El <b>Manual de usuario</b> (PDF) explica todas las funciones.</p>
 <tr><td><b>F</b> · <b>V</b> · <b>M</b></td><td>Foco · Cortina · Resaltar cursor y clics</td></tr>
 <tr><td><b>↓ / ↑</b></td><td>Descubrir / cubrir con la cortina</td></tr>
 <tr><td><b>Alt + rueda</b></td><td>Tamaño del foco</td></tr>
+<tr><td><b>Mayús+F</b></td><td>Foco en círculo o en rectángulo</td></tr>
 <tr><td><b>Z</b> · <b>Esc</b></td><td>Zoom · Salir del zoom o pasar a «Ratón libre»</td></tr>
 <tr><td colspan="2"><br><b>Páginas y archivos</b></td></tr>
 <tr><td><b>AvPág / RePág</b> · <b>N</b></td><td>Página siguiente / anterior · Página nueva</td></tr>
 <tr><td><b>Ctrl+S</b> · <b>Ctrl+O</b> · <b>Ctrl+P</b></td><td>Guardar · Abrir sesión · Exportar a PDF</td></tr>
 <tr><td colspan="2"><br><b>Escribiendo texto</b>: Intro = nueva línea · Esc o clic fuera = terminar ·
-Ctrl+V = pegar</td></tr>
+Ctrl+V = pegar · flechas, Inicio y Fin = mover el cursor<br>
+<b>Clic sobre un texto ya escrito</b> = editarlo (arrástralo para moverlo)</td></tr>
 </table>
 <p>Las capturas se guardan en:<br><code>{folder}</code></p>
 """

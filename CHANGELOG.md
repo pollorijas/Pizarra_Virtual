@@ -9,6 +9,25 @@ incompatibles.
 Cada versión publicada debe tener su sección aquí: el flujo de publicación de GitHub Actions se
 detiene si falta.
 
+## [1.2.2] - 2026-11-18
+
+### Añadido
+- **Editar textos ya escritos.** Con la herramienta Texto, un clic sobre un texto lo abre de nuevo:
+  el cursor de escritura se coloca donde se hizo clic y se mueve con ← → ↑ ↓, Inicio / Fin y
+  Ctrl+Inicio / Ctrl+Fin; Supr borra hacia delante; arrastrar el texto lo cambia de lugar; la barra
+  muestra su color, tamaño y negrita para cambiarlos. Borrar todas sus letras elimina el texto y el
+  clic derecho descarta los cambios. Cada edición se puede deshacer y se guarda en la sesión.
+- **Foco rectangular**: además del círculo, una franja ancha y baja para leer un texto línea a línea.
+  Se cambia con **Mayús+F**, con clic derecho sobre el botón del foco o desde el menú del icono
+  junto al reloj, y el programa recuerda la forma elegida.
+- **Papel milimetrado** como nueva pauta, con líneas finas, intermedias cada 5 y marcadas cada 10.
+
+### Cambiado
+- Mientras se escribe un texto, un marco discontinuo indica cuál es; la opacidad también se aplica
+  al texto en curso.
+- Las sesiones `.pizarra` guardan un identificador por texto (necesario para las ediciones). Las
+  sesiones de versiones anteriores se siguen abriendo sin cambios.
+
 ## [1.2.1] - 2026-11-18
 
 ### Corregido
@@ -68,4 +87,5 @@ detiene si falta.
   colores, grosor y opacidad, deshacer/rehacer, capturas con y sin dibujo, atajos globales, modo
   «Ratón libre», varios monitores y escalado de pantalla (DPI).
 
+[1.2.2]: https://github.com/pollorijas/Pizarra_Virtual/releases/tag/v1.2.2
 [1.2.1]: https://github.com/pollorijas/Pizarra_Virtual/releases/tag/v1.2.1

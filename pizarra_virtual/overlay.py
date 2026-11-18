@@ -15,6 +15,7 @@ desvanece. Se dibujan en coordenadas de la ventana, encima de todo.
 """
 from __future__ import annotations
 
+import dataclasses
 import math
 import random
 import time
@@ -28,7 +29,7 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import QWidget
 
 from . import render, winutil
-from .items import ShapeItem, StrokeItem, TextItem
+from .items import ShapeItem, StrokeItem, TextEditItem, TextItem
 from .tools import SHAPE_TOOLS, Tool
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -50,6 +51,13 @@ _PEN_SMOOTHING_TABLET = 0.65
 
 # Efectos
 SPOTLIGHT_DIM = QColor(0, 0, 0, 190)
+# Foco rectangular: franja ancha y baja (proporciones respecto al «radio» del foco)
+SPOTLIGHT_RECT_W, SPOTLIGHT_RECT_H = 1.9, 0.5
+
+
+def spotlight_rect(center: QPointF, radius: float) -> QRectF:
+    w, h = radius * SPOTLIGHT_RECT_W, radius * SPOTLIGHT_RECT_H
+    return QRectF(center.x() - w, center.y() - h, 2 * w, 2 * h)
 CURTAIN_COLOR = QColor(30, 32, 38)
 CURTAIN_GRAB = 22                 # px alrededor del borde de la cortina para arrastrarla
 HALO_RADIUS = 24
@@ -124,6 +132,10 @@ class Overlay(QWidget):
         self._stroke: StrokeItem | None = None
         self._shape: ShapeItem | None = None
         self._text: TextItem | None = None
+        self._caret = 0  # posición del cursor dentro del texto en edición
+        self._edit_uid: str | None = None  # uid del texto ya escrito que se está editando
+        self._edit_orig: TextItem | None = None
+        self._text_drag: tuple[QPointF, float, float] | None = None  # (inicio, x, y) al arrastrar un texto
         self._state: render.StrokeState | None = None
         self._tablet_active = False
         self._last_pos = QPointF()
@@ -321,8 +333,10 @@ class Overlay(QWidget):
             return
         self.canvas.fill(_TRANSPARENT)
         self._clear_layer()
-        for item in self.ctrl.items_for(self.key):
+        for item in self.ctrl.items_for(self.key, exclude_uid=self._edit_uid):
             render.apply_item_to_canvas(self.canvas, self.layer, item)
+        if self._text is not None:  # el texto en edición se dibuja aparte, en la capa
+            self._render_text_preview()
         self.update()
 
     def apply_item(self, item, update: bool = True) -> None:
@@ -383,8 +397,17 @@ class Overlay(QWidget):
             p.setOpacity(active.opacity)
             p.drawImage(QPointF(0, 0), self.layer)
             p.restore()
+        if self._text is not None:
+            # Marco discontinuo: indica qué texto se está escribiendo/editando (y que se puede arrastrar)
+            p.save()
+            pen = QPen(QColor(90, 140, 230, 170), 1.0, Qt.PenStyle.DashLine)
+            pen.setCosmetic(True)
+            p.setPen(pen)
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawRect(render.text_hit_rect(self._text).adjusted(2, 2, -2, -2))
+            p.restore()
         if self._text is not None and self._caret_on:
-            a, b = render.text_caret(self._text)
+            a, b = render.text_caret(self._text, self._caret)
             p.setPen(QPen(QColor(*self._text.rgba), max(1.5, self._text.size / 18)))
             p.drawLine(a, b)
 
@@ -464,7 +487,17 @@ class Overlay(QWidget):
         if self.curtain_y is not None:
             self._paint_curtain(p)
         if c.spotlight:
-            if self._cursor_view is not None:
+            if self._cursor_view is not None and c.spotlight_shape == "rect":
+                hole = spotlight_rect(self._cursor_view, float(c.spotlight_radius))
+                dim = QPainterPath()
+                dim.addRect(QRectF(rect))
+                inner = QPainterPath()
+                inner.addRoundedRect(hole, 10, 10)
+                p.fillPath(dim.subtracted(inner), SPOTLIGHT_DIM)
+                p.setPen(QPen(QColor(255, 255, 255, 90), 1.5))
+                p.setBrush(Qt.BrushStyle.NoBrush)
+                p.drawRoundedRect(hole, 10, 10)
+            elif self._cursor_view is not None:
                 r = float(c.spotlight_radius)
                 g = QRadialGradient(self._cursor_view, r)
                 g.setColorAt(0.0, QColor(0, 0, 0, 0))
@@ -548,7 +581,7 @@ class Overlay(QWidget):
         c = self.ctrl
         r = HALO_RADIUS + 4
         if c.spotlight:
-            r = max(r, c.spotlight_radius + 4)
+            r = max(r, c.spotlight_radius * (SPOTLIGHT_RECT_W + 0.1 if c.spotlight_shape == "rect" else 1) + 4)
         if c.tool == Tool.LASER:
             r = max(r, c.size_for(Tool.LASER) * 1.6 + 4)
         return QRectF(pos.x() - r, pos.y() - r, 2 * r, 2 * r).toAlignedRect()
@@ -599,6 +632,14 @@ class Overlay(QWidget):
     def _begin(self, pos: QPointF, pressure: float | None, t: int, eraser: bool = False) -> None:
         if not self.ctrl.drawing:
             return
+        if not eraser and self.ctrl.tool == Tool.TEXT and self._text is not None \
+                and render.text_hit_rect(self._text).contains(pos):
+            # Clic dentro del texto que se está escribiendo: mueve el cursor (o arrastra el texto).
+            self._caret = render.text_index_at(self._text, pos)
+            self._text_drag = (QPointF(pos), self._text.x, self._text.y)
+            self._caret_on = True
+            self.update(self._view_rect(render.item_rect(self._text)))
+            return
         self.finish_current()
         c = self.ctrl
         tool = Tool.ERASER if eraser else c.tool
@@ -610,8 +651,15 @@ class Overlay(QWidget):
                                     filled=c.fill_shapes)
             return
         if tool == Tool.TEXT:
+            hit = self.text_at(pos)
+            if hit is not None:
+                self._open_text(hit, pos)
+                return
             fm_height = size * 1.33
             self._text = TextItem(rgba, size, opacity, pos.x(), pos.y() - fm_height / 2, "", c.text_bold)
+            self._caret = 0
+            self._edit_uid = self._edit_orig = None
+            self._text_drag = None
             self._caret_on = True
             self._caret_timer.start()
             self._render_text_preview()
@@ -685,6 +733,14 @@ class Overlay(QWidget):
         self.update(self._view_rect(rect))
 
     def _move(self, pos: QPointF, pressure: float | None, t: int, modifiers) -> None:
+        if self._text is not None and self._text_drag is not None:
+            start, x0, y0 = self._text_drag
+            dx, dy = pos.x() - start.x(), pos.y() - start.y()
+            moved = abs(self._text.x - x0) > 0 or abs(self._text.y - y0) > 0
+            if moved or math.hypot(dx, dy) >= 4:  # umbral: un clic con temblor no mueve el texto
+                self._text.x, self._text.y = x0 + dx, y0 + dy
+                self._render_text_preview()
+            return
         if self._stroke is not None:
             if self._stroke.tool == Tool.PEN:
                 # Estabilizador: suaviza el temblor del ratón/lápiz sin perder precisión.
@@ -716,6 +772,7 @@ class Overlay(QWidget):
             last = self._stroke.points[-1]
             if math.hypot(pos.x() - last[0], pos.y() - last[1]) >= 0.5:
                 self._add_point(pos, pressure, t, force=True)
+        self._text_drag = None
         if self._text is None:  # el texto sigue en edición tras soltar el clic
             self.finish_current()
 
@@ -746,13 +803,20 @@ class Overlay(QWidget):
                 self.ctrl.push(self.key, sh)
             self.update()
         elif self._text is not None:
-            item = self._text
+            item, uid, orig = self._text, self._edit_uid, self._edit_orig
             self._text = None
+            self._edit_uid = self._edit_orig = None
+            self._text_drag = None
             self._caret_timer.stop()
             self._clear_layer()
-            if item.text.strip():
-                self.apply_item(item, update=False)
-                self.ctrl.push(self.key, item)
+            if uid is None:  # texto nuevo
+                if item.text.strip():
+                    self.apply_item(item, update=False)
+                    self.ctrl.push(self.key, item)
+            else:  # texto ya escrito: la edición queda en el historial (se puede deshacer)
+                if item != orig:
+                    self.ctrl.push(self.key, TextEditItem(uid, item))
+                self.rebuild()
             self.update()
             self.ctrl.end_text_edit(self)
         self._state = None
@@ -763,12 +827,17 @@ class Overlay(QWidget):
             self.finish_current()
             return
         editing_text = self._text is not None
+        reopened = self._edit_uid is not None
         self._stroke = None
         self._shape = None
         self._text = None
+        self._edit_uid = self._edit_orig = None
+        self._text_drag = None
         self._caret_timer.stop()
         self._state = None
         self._clear_layer()
+        if reopened:
+            self.rebuild()  # vuelve a mostrar el texto tal como estaba
         self.update()
         if editing_text:
             self.ctrl.end_text_edit(self)
@@ -782,6 +851,27 @@ class Overlay(QWidget):
     @property
     def editing_text(self) -> TextItem | None:
         return self._text
+
+    def text_at(self, pos: QPointF) -> TextItem | None:
+        """El texto ya escrito (el de más arriba) que hay bajo un punto, o None."""
+        for item in reversed(self.ctrl.items_for(self.key)):
+            if isinstance(item, TextItem) and render.text_hit_rect(item).contains(pos):
+                return item
+        return None
+
+    def _open_text(self, item: TextItem, pos: QPointF) -> None:
+        """Abre un texto ya escrito para editarlo (el original se oculta mientras tanto)."""
+        c = self.ctrl
+        self._edit_uid = item.uid
+        self._edit_orig = item
+        self._text = dataclasses.replace(item)
+        self._caret = render.text_index_at(self._text, pos)
+        self._text_drag = (QPointF(pos), item.x, item.y)
+        self._caret_on = True
+        self._caret_timer.start()
+        c.adopt_text_style(item)
+        self.rebuild()  # sin el original; el texto en edición se dibuja en la capa
+        c.begin_text_edit(self)
 
     def _render_text_preview(self) -> None:
         if self._text is None:
@@ -799,11 +889,13 @@ class Overlay(QWidget):
         if self._text is not None:
             self.update(self._view_rect(render.item_rect(self._text)))
 
-    def restyle_text(self, rgba, size: float, bold: bool) -> None:
-        """Aplica color, tamaño y negrita al texto que se está escribiendo."""
+    def restyle_text(self, rgba, size: float, bold: bool, opacity: float | None = None) -> None:
+        """Aplica color, tamaño, negrita y opacidad al texto que se está escribiendo."""
         if self._text is None:
             return
-        self._text.rgba, self._text.size, self._text.bold = rgba, size, bold
+        self._text.rgba, self._text.size, self._text.bold = tuple(rgba), size, bold
+        if opacity is not None:
+            self._text.opacity = opacity
         self._render_text_preview()
 
     def text_key(self, ev) -> None:
@@ -813,23 +905,51 @@ class Overlay(QWidget):
             return
         key, mods = ev.key(), ev.modifiers()
         ctrl_down = bool(mods & Qt.KeyboardModifier.ControlModifier)
+        text, caret = item.text, max(0, min(len(item.text), self._caret))
         if key == Qt.Key.Key_Escape or (ctrl_down and key in (Qt.Key.Key_Return, Qt.Key.Key_Enter)):
             self.finish_current()
             return
+
+        def insert(s: str) -> None:
+            nonlocal text, caret
+            text = text[:caret] + s + text[caret:]
+            caret += len(s)
+
         if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
-            item.text += "\n"
+            insert("\n")
         elif key == Qt.Key.Key_Backspace:
-            item.text = item.text[:-1]
+            if caret > 0:
+                text, caret = text[:caret - 1] + text[caret:], caret - 1
+        elif key == Qt.Key.Key_Delete:
+            text = text[:caret] + text[caret + 1:]
+        elif key == Qt.Key.Key_Left:
+            caret = max(0, caret - 1)
+        elif key == Qt.Key.Key_Right:
+            caret = min(len(text), caret + 1)
+        elif key in (Qt.Key.Key_Home, Qt.Key.Key_End):
+            line, _ = render.text_line_col(text, caret)
+            if ctrl_down:
+                caret = 0 if key == Qt.Key.Key_Home else len(text)
+            else:
+                caret = render.text_index(text, line, 0 if key == Qt.Key.Key_Home else 10 ** 9)
+        elif key in (Qt.Key.Key_Up, Qt.Key.Key_Down):
+            a, _b = render.text_caret(item, caret)
+            line, _ = render.text_line_col(text, caret)
+            fm_line = render.text_box(dataclasses.replace(item, text="x")).height()
+            target = line + (-1 if key == Qt.Key.Key_Up else 1)
+            if 0 <= target <= text.count("\n"):
+                caret = render.text_index_at(item, QPointF(a.x() - 1, item.y + (target + 0.5) * fm_line))
         elif key == Qt.Key.Key_Tab:
-            item.text += "    "
+            insert("    ")
         elif ctrl_down and key == Qt.Key.Key_V:
             pasted = QGuiApplication.clipboard().text().replace("\r\n", "\n").replace("\r", "\n")
-            item.text += "".join(ch for ch in pasted if ch == "\n" or ch.isprintable())
+            insert("".join(ch for ch in pasted if ch == "\n" or ch.isprintable()))
         else:
             txt = ev.text()
             if not txt or ctrl_down or not txt.isprintable():
                 return
-            item.text += txt
+            insert(txt)
+        item.text, self._caret = text, caret
         self._caret_on = True
         self._render_text_preview()
 

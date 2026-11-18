@@ -151,6 +151,27 @@ def _mosaic(images: list[QImage], cols: int, gap: int = 12) -> QImage:
     return out
 
 
+def _texto_editado(ctrl, ov, shot):
+    """Un texto ya escrito abierto de nuevo para editarlo (marco discontinuo y cursor)."""
+    from PySide6.QtCore import QEvent
+    from PySide6.QtGui import QKeyEvent
+
+    ctrl.set_tool(Tool.TEXT)
+    text = next(i for i in ctrl.items_for(ov.key) if getattr(i, "text", "") == "¡Importante!")
+    from pizarra_virtual import render
+
+    box = render.text_box(text)
+    QTest.mouseClick(ov, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier,
+                     QPoint(int(box.right() - 4), int(box.center().y())))
+    ov._trails.clear()  # sin la tinta del láser de la imagen anterior
+    for ch in " (repasar)":
+        QApplication.sendEvent(ctrl.toolbar, QKeyEvent(QEvent.Type.KeyPress, 0, Qt.KeyboardModifier.NoModifier, ch))
+    ov._caret_on = True
+    img = shot("Editar un texto ya escrito")
+    QTest.keyClick(ctrl.toolbar, Qt.Key.Key_Escape)
+    return img
+
+
 def build_images() -> dict[str, QImage]:
     from pizarra_virtual.app import Controller
 
@@ -190,7 +211,7 @@ def build_images() -> dict[str, QImage]:
     chalk = session.render_page(session.Page(background="chalk", pattern="cartesian"), [], ov.width(), ov.height(),
                                 scale=1.0)
     pats.append(_label(_crop(chalk, 420, 300), "Pizarra verde + plano"))
-    images["pautas.png"] = _mosaic(pats, 3)
+    images["pautas.png"] = _mosaic(pats, 4)
 
     # Herramientas de presentación sobre el ejemplo
     def shot(name):
@@ -202,6 +223,11 @@ def build_images() -> dict[str, QImage]:
     ctrl.toggle_spotlight()
     ctrl._tick()
     foco = shot("Foco")
+    ctrl.set_spotlight_shape("rect")
+    QCursor.setPos(ov.mapToGlobal(QPoint(250, 125)))
+    ctrl._tick()
+    foco_rect = shot("Foco rectangular (Mayús+F)")
+    ctrl.set_spotlight_shape("circle")
     ctrl.toggle_spotlight()
     ctrl.toggle_curtain()
     ov.set_curtain(150)
@@ -228,7 +254,7 @@ def build_images() -> dict[str, QImage]:
     ctrl._tick()
     laser = shot("Láser con tinta temporal")
     QTest.mouseRelease(ov, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, QPoint(560, 110))
-    images["presentacion.png"] = _mosaic([foco, cortina, resaltar, laser], 2)
+    images["presentacion.png"] = _mosaic([foco, foco_rect, cortina, resaltar, laser, _texto_editado(ctrl, ov, shot)], 2)
 
     ctrl.dirty = False
     ctrl.shutdown()

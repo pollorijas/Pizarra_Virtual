@@ -11,7 +11,7 @@ from PySide6.QtCore import QMarginsF, QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QImage, QPageLayout, QPageSize, QPainter, QPdfWriter
 
 from . import __version__, render
-from .items import ClearItem, ShapeItem, StrokeItem, TextItem
+from .items import ClearItem, ShapeItem, StrokeItem, TextEditItem, TextItem, resolve_items
 from .tools import BACKGROUNDS, PATTERNS, BrushType, Tool
 
 FILE_EXTENSION = ".pizarra"
@@ -30,6 +30,10 @@ class Page:
     def has_content(self) -> bool:
         return any(not isinstance(item, ClearItem) for _, item in self.history)
 
+    def items_for(self, key: str, exclude_uid: str | None = None) -> list:
+        """Lo que se dibuja en la pantalla ``key`` (con las ediciones de texto aplicadas)."""
+        return resolve_items([item for k, item in self.history if k is None or k == key], exclude_uid)
+
 
 # ---------------------------------------------------------------------- serialización
 
@@ -45,7 +49,9 @@ def item_to_dict(item) -> dict:
                 "filled": item.filled}
     if isinstance(item, TextItem):
         return {"type": "text", "rgba": list(item.rgba), "size": item.size, "opacity": item.opacity,
-                "x": item.x, "y": item.y, "text": item.text, "bold": item.bold}
+                "x": item.x, "y": item.y, "text": item.text, "bold": item.bold, "uid": item.uid}
+    if isinstance(item, TextEditItem):
+        return {"type": "text_edit", "uid": item.uid, "text": item_to_dict(item.text)}
     if isinstance(item, ClearItem):
         return {"type": "clear"}
     raise TypeError(f"Elemento desconocido: {item!r}")
@@ -61,8 +67,15 @@ def item_from_dict(d: dict):
         return ShapeItem(Tool(d["tool"]), tuple(d["rgba"]), float(d["size"]), float(d["opacity"]),
                          float(d["x1"]), float(d["y1"]), float(d["x2"]), float(d["y2"]), bool(d.get("filled")))
     if t == "text":
-        return TextItem(tuple(d["rgba"]), float(d["size"]), float(d["opacity"]), float(d["x"]), float(d["y"]),
+        item = TextItem(tuple(d["rgba"]), float(d["size"]), float(d["opacity"]), float(d["x"]), float(d["y"]),
                         str(d.get("text", "")), bool(d.get("bold")))
+        if d.get("uid"):  # las sesiones de la 1.2.0/1.2.1 no lo tienen: se genera uno nuevo
+            item.uid = str(d["uid"])
+        return item
+    if t == "text_edit":
+        text = item_from_dict(d["text"])
+        text.uid = str(d["uid"])
+        return TextEditItem(str(d["uid"]), text)
     if t == "clear":
         return ClearItem()
     raise ValueError(f"Tipo de elemento desconocido: {t!r}")

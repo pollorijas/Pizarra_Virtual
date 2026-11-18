@@ -281,8 +281,11 @@ class Toolbar(QWidget):
         fx = QHBoxLayout()
         fx.setSpacing(4)
         self.spot_btn = self._tool_button("spotlight", "Foco: oscurece todo menos alrededor del cursor\n"
-                                                       "[F / Ctrl+Alt+F] · Alt + rueda: tamaño", checkable=True)
+                                                       "[F / Ctrl+Alt+F] · Alt + rueda: tamaño\n"
+                                                       "Clic derecho o Shift+F: círculo o rectángulo", checkable=True)
         self.spot_btn.clicked.connect(lambda: self.ctrl.toggle_spotlight())
+        self.spot_btn.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.spot_btn.customContextMenuRequested.connect(self._spotlight_menu)
         self.curtain_btn = self._tool_button("curtain", "Cortina: tapa la pantalla y se descubre poco a poco\n"
                                                         "[V] · arrástrala o usa ↓ / ↑", checkable=True)
         self.curtain_btn.clicked.connect(lambda: self.ctrl.toggle_curtain())
@@ -365,6 +368,7 @@ class Toolbar(QWidget):
         add("B", c.cycle_brush_type)
         add("R", lambda: c.set_fill(not c.fill_shapes))
         add("F", c.toggle_spotlight)
+        add("Shift+F", c.toggle_spotlight_shape)
         add("V", c.toggle_curtain)
         add("M", c.toggle_highlight)
         add("Down", lambda: c.curtain_step(1))
@@ -398,6 +402,26 @@ class Toolbar(QWidget):
         add("Ctrl+Alt+Shift+S", lambda: c.capture(with_drawing=False))
 
     # ------------------------------------------------------------------ acciones
+
+    def build_spotlight_menu(self) -> QMenu:
+        """Menú con la forma del foco (clic derecho sobre el botón del foco)."""
+        from .app import SPOTLIGHT_SHAPES
+
+        menu = QMenu(self)
+        for key, label in SPOTLIGHT_SHAPES.items():
+            act = menu.addAction(f"Foco: {label.lower()}")
+            act.setCheckable(True)
+            act.setChecked(self.ctrl.spotlight_shape == key)
+            act.triggered.connect(lambda _c=False, k=key: self._choose_spotlight_shape(k))
+        return menu
+
+    def _choose_spotlight_shape(self, key: str) -> None:
+        self.ctrl.set_spotlight_shape(key)
+        if not self.ctrl.spotlight:
+            self.ctrl.toggle_spotlight()
+
+    def _spotlight_menu(self, pos) -> None:
+        self.build_spotlight_menu().exec(self.spot_btn.mapToGlobal(pos))
 
     def pick_color(self) -> None:
         dlg_color = QColorDialog.getColor(self.ctrl.color, self, "Elegir color")

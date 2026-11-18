@@ -1,6 +1,7 @@
 """Elementos dibujados (modelo vectorial usado para deshacer/rehacer y re-renderizar)."""
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass, field
 
 from .tools import BrushType, Tool
@@ -45,6 +46,20 @@ class TextItem:
     y: float
     text: str = ""
     bold: bool = False
+    # Identificador estable: las ediciones posteriores (TextEditItem) se refieren a él.
+    uid: str = field(default_factory=lambda: uuid.uuid4().hex)
+
+
+@dataclass
+class TextEditItem:
+    """Edición de un texto ya escrito: sustituye (en su mismo lugar) al texto con ese ``uid``.
+
+    Se guarda en el historial como un paso más, así deshacer recupera la versión anterior.
+    Si el texto nuevo queda vacío, el texto desaparece.
+    """
+
+    uid: str
+    text: TextItem
 
 
 @dataclass
@@ -52,4 +67,24 @@ class ClearItem:
     """Borrado completo del lienzo (se puede deshacer)."""
 
 
-Item = StrokeItem | ShapeItem | TextItem | ClearItem
+Item = StrokeItem | ShapeItem | TextItem | TextEditItem | ClearItem
+
+
+def resolve_items(items, exclude_uid: str | None = None) -> list:
+    """Elementos que hay que dibujar, en orden, con las ediciones de texto ya aplicadas.
+
+    Cada TextEditItem sustituye a la versión vigente de su texto en la posición original
+    (así se respeta el orden respecto a la goma y al resto de trazos). ``exclude_uid`` oculta
+    un texto (el que se está editando, que se dibuja aparte).
+    """
+    out: list = []
+    for item in items:
+        if isinstance(item, TextEditItem):
+            for i in range(len(out) - 1, -1, -1):
+                o = out[i]
+                if isinstance(o, TextItem) and o.uid == item.uid:
+                    out[i] = item.text
+                    break
+        else:
+            out.append(item)
+    return [o for o in out if not (isinstance(o, TextItem) and (not o.text.strip() or o.uid == exclude_uid))]

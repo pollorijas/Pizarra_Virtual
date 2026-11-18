@@ -429,3 +429,38 @@ def test_native_mouse_mode_with_cartesian_sheet_can_return(ctrl, qapp):
         _settle(qapp, 400)
         assert ctrl.drawing, cycle
         assert region(f"cartesiano_vuelta_{cycle}.png") == sheet, cycle  # la hoja vuelve igual
+
+
+def test_native_edit_written_text_with_real_mouse_and_keyboard(ctrl, qapp):
+    """Clic real sobre un texto ya escrito: se abre, Fin + teclas reales lo amplían y
+    arrastrarlo con el ratón real lo mueve."""
+    from pizarra_virtual import render
+    from pizarra_virtual.items import TextEditItem, TextItem
+    from pizarra_virtual.tools import Tool
+
+    _, _, user32 = _win32()
+    ov = _overlay(ctrl)
+    dpr = ov.devicePixelRatioF()
+    ctrl.set_tool(Tool.TEXT)
+    _settle(qapp)
+    _real_mouse(qapp, [(400, 300), (400, 300)], dpr)
+    _real_keys(qapp, "hola")
+    user32.keybd_event(0x1B, 0, 0, 0)  # Esc
+    user32.keybd_event(0x1B, 0, 2, 0)
+    _settle(qapp, 200)
+    (t,) = [i for i in ctrl.items_for(ov.key) if isinstance(i, TextItem)]
+    c = render.text_box(t).center()
+    _real_mouse(qapp, [(c.x(), c.y()), (c.x(), c.y())], dpr)  # abrir para editar
+    assert ctrl.text_editor is ov and ov.editing_text.uid == t.uid
+    user32.keybd_event(0x23, 0, 0, 0)  # Fin
+    user32.keybd_event(0x23, 0, 2, 0)
+    _real_keys(qapp, " mundo")
+    _real_mouse(qapp, [(c.x(), c.y())] + [(c.x() + 10 * k, c.y() + 6 * k) for k in range(1, 13)], dpr)
+    user32.keybd_event(0x1B, 0, 0, 0)
+    user32.keybd_event(0x1B, 0, 2, 0)
+    _settle(qapp, 300)
+    (e,) = [i for i in ctrl.items_for(ov.key) if isinstance(i, TextItem)]
+    assert e.text.lower() == "hola mundo" and isinstance(ctrl.history[-1][1], TextEditItem)
+    assert abs(e.x - (t.x + 120)) <= 2 and abs(e.y - (t.y + 72)) <= 2
+    assert ctrl.tool == Tool.TEXT and not ctrl.spotlight
+    _grab("texto_editado.png")

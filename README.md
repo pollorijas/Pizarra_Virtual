@@ -46,11 +46,11 @@ el **Manual de usuario** en PDF.
 | **Goma de borrar** | Borra píxeles de los trazos con tamaño ajustable (4–250 px). Con un lápiz de tableta, el extremo «goma» del lápiz borra automáticamente. |
 | **Figuras** | **Rectángulo/cuadrado**, **elipse/círculo**, **triángulo**, **línea** y **flecha**, dibujadas arrastrando el cursor. Con **Mayús** se fuerzan proporciones iguales (cuadrado, círculo) o ángulos de 15° (líneas y flechas). Las figuras cerradas se pueden **rellenar**. |
 | **Color y grosor** | Botón de color con selector completo + paleta de 12 colores; deslizadores de **grosor** y **opacidad** (cada herramienta recuerda su propio tamaño y opacidad). También con la **rueda del ratón** sobre la pizarra. |
-| **Texto** | Tecla **T**: clic donde quieras y escribe con el teclado (tildes, ñ, varias líneas, Ctrl+V para pegar). Tamaño de letra, color y **negrita**. Mientras escribes, las teclas no activan atajos. Esc o un clic fuera termina el texto. |
+| **Texto** | Tecla **T**: clic donde quieras y escribe con el teclado (tildes, ñ, varias líneas, Ctrl+V para pegar). Tamaño de letra, color y **negrita**. Mientras escribes, las teclas no activan atajos. Esc o un clic fuera termina el texto. **Clic sobre un texto ya escrito** para editarlo: cursor con flechas, Inicio/Fin, Supr, arrastrar para moverlo; cada edición se puede deshacer. |
 | **Puntero láser / tinta temporal** | Tecla **L**: el cursor se convierte en un punto luminoso; al arrastrar deja un trazo brillante que **se desvanece solo** (no se guarda). |
 | **Fondo** | Transparente, «Oscurecer escritorio», «Pizarra blanca» o «Pizarra verde» (para usarla como pizarra tradicional). |
-| **Pautas** | **Cuadrícula**, **hoja rayada**, **pauta de caligrafía** (4 líneas), **plano cartesiano** con ejes numerados y **pentagrama**, sobre cualquier fondo. Se incluyen en capturas y PDF. En «Ratón libre» la hoja (fondo y pauta) se aparta para poder usar el equipo y vuelve al pasar a «Dibujando». |
-| **Foco** | **F** / **Ctrl+Alt+F**: oscurece la pantalla salvo un círculo alrededor del cursor (**Alt + rueda** para su tamaño). Funciona también en «Ratón libre», sobre otros programas. |
+| **Pautas** | **Cuadrícula**, **papel milimetrado**, **hoja rayada**, **pauta de caligrafía** (4 líneas), **plano cartesiano** con ejes numerados y **pentagrama**, sobre cualquier fondo. Se incluyen en capturas y PDF. En «Ratón libre» la hoja (fondo y pauta) se aparta para poder usar el equipo y vuelve al pasar a «Dibujando». |
+| **Foco** | **F** / **Ctrl+Alt+F**: oscurece la pantalla salvo un círculo o un **rectángulo** (franja para leer línea a línea) alrededor del cursor (**Alt + rueda** para su tamaño, **Mayús+F** o clic derecho en el botón para cambiar la forma). Funciona también en «Ratón libre», sobre otros programas. |
 | **Cortina** | **V**: tapa la pantalla y se descubre poco a poco arrastrándola o con **↓ / ↑** (preguntas antes que respuestas, textos párrafo a párrafo). |
 | **Resaltar cursor y clics** | **M** / **Ctrl+Alt+M**: halo amarillo alrededor del puntero y una onda en cada clic (roja izquierdo, azul derecho), también al hacer clic en otros programas. |
 | **Páginas** | Varias páginas por clase, cada una con su dibujo, historial, fondo y pauta. **N** crea una nueva, **AvPág / RePág** pasan de página (compatible con presentadores inalámbricos). |
@@ -143,6 +143,7 @@ deshacer, rehacer, borrar todo · zoom, captura, carpeta de capturas · ocultar,
 | **Supr** | Borrar todo (se puede deshacer) |
 | **Z** | Activar / salir del zoom |
 | **F** · **V** · **M** | Foco · Cortina · Resaltar cursor y clics |
+| **Mayús+F** | Foco en círculo o en rectángulo |
 | **↓ / ↑** | Descubrir / tapar con la cortina |
 | **Alt + rueda** | Tamaño del foco |
 | **N** | Página nueva |
@@ -251,21 +252,21 @@ versión, primero:
 2. añade su sección `## [X.Y.Z] - fecha` al principio de [`CHANGELOG.md`](CHANGELOG.md) (registro de
    cambios de todas las versiones);
 3. escribe sus notas en `notas/vX.Y.Z.md` (texto de la release; ver
-   [`notas/v1.2.1.md`](notas/v1.2.1.md)).
+   [`notas/v1.2.2.md`](notas/v1.2.2.md)).
 
 El flujo comprueba esos tres puntos y no publica si falta alguno. Súbelos y después crea y sube la
 etiqueta:
 
 ```bash
-git tag v1.2.1
+git tag v1.2.2
 ```
 
 ```bash
-git push origin v1.2.1
+git push origin v1.2.2
 ```
 
 También se puede publicar sin crear la etiqueta a mano: en **Actions → Compilar PizarraVirtual.exe →
-Run workflow**, escribe la versión (p. ej. `v1.2.1`) en el campo *version* (y marca *borrar_anteriores* para dejar solo esa); el flujo crea la etiqueta
+Run workflow**, escribe la versión (p. ej. `v1.2.2`) en el campo *version* (y marca *borrar_anteriores* para dejar solo esa); el flujo crea la etiqueta
 sobre ese commit. En ambos casos vuelve a pasar todas las pruebas y, solo si todo va bien, publica la
 release con el `.zip` (ejecutable + manual).
 

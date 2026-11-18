@@ -525,13 +525,43 @@ def text_box(item: TextItem) -> QRectF:
     return QRectF(item.x, item.y, width, fm.lineSpacing() * len(lines))
 
 
-def text_caret(item: TextItem) -> tuple[QPointF, QPointF]:
-    """Extremos del cursor de escritura (al final del texto)."""
+def text_caret(item: TextItem, index: int | None = None) -> tuple[QPointF, QPointF]:
+    """Extremos del cursor de escritura en la posición ``index`` del texto (por defecto, al final)."""
+    fm = QFontMetricsF(text_font(item))
+    index = len(item.text) if index is None else max(0, min(len(item.text), index))
+    before = item.text[:index].split("\n")
+    x = item.x + fm.horizontalAdvance(before[-1])
+    top = item.y + fm.lineSpacing() * (len(before) - 1)
+    return QPointF(x + 1, top + 2), QPointF(x + 1, top + fm.height() - 2)
+
+
+def text_line_col(text: str, index: int) -> tuple[int, int]:
+    before = text[:index].split("\n")
+    return len(before) - 1, len(before[-1])
+
+
+def text_index(text: str, line: int, col: int) -> int:
+    """Posición absoluta de (línea, columna), ajustada a los límites del texto."""
+    lines = text.split("\n")
+    line = max(0, min(len(lines) - 1, line))
+    col = max(0, min(len(lines[line]), col))
+    return sum(len(ln) + 1 for ln in lines[:line]) + col
+
+
+def text_index_at(item: TextItem, pos: QPointF) -> int:
+    """Posición del texto más cercana a un punto (para colocar el cursor con un clic)."""
     fm = QFontMetricsF(text_font(item))
     lines = text_lines(item)
-    x = item.x + fm.horizontalAdvance(lines[-1])
-    top = item.y + fm.lineSpacing() * (len(lines) - 1)
-    return QPointF(x + 1, top + 2), QPointF(x + 1, top + fm.height() - 2)
+    line = max(0, min(len(lines) - 1, int((pos.y() - item.y) // fm.lineSpacing())))
+    dx = pos.x() - item.x
+    text = lines[line]
+    col = min(range(len(text) + 1), key=lambda k: abs(fm.horizontalAdvance(text[:k]) - dx))
+    return text_index(item.text, line, col)
+
+
+def text_hit_rect(item: TextItem) -> QRectF:
+    """Zona donde un clic con la herramienta Texto abre ese texto para editarlo."""
+    return text_box(item).adjusted(-6, -6, 6, 6)
 
 
 def draw_text(p: QPainter, item: TextItem) -> None:
@@ -583,6 +613,17 @@ def draw_pattern(p: QPainter, w: float, h: float, pattern: str, background: str)
             vline(i * step + 0.5, strong if i % 5 == 0 else soft)
         for i in range(0, int(h // step) + 1):
             hline(i * step + 0.5, strong if i % 5 == 0 else soft)
+    elif pattern == "mm":
+        # Milimetrado: líneas finas cada 8 px, intermedias cada 5 y marcadas cada 10 (como 1, 5 y 10 mm).
+        step = 8
+        fine = QColor(soft)
+        fine.setAlpha(max(25, soft.alpha() // 2))
+        for i in range(0, int(w // step) + 1):
+            vline(i * step + 0.5, strong if i % 10 == 0 else soft if i % 5 == 0 else fine,
+                  1.4 if i % 10 == 0 else 1.0)
+        for i in range(0, int(h // step) + 1):
+            hline(i * step + 0.5, strong if i % 10 == 0 else soft if i % 5 == 0 else fine,
+                  1.4 if i % 10 == 0 else 1.0)
     elif pattern == "ruled":
         y = 96.5
         while y < h:

@@ -66,7 +66,7 @@ def render_all_tools():
     render.draw_text(p, TextItem((20, 20, 20, 255), 28, 1.0, 10, 10, "Pizarra ñ 123"))
     p.end()
     results["text"] = painted(img)
-    for pattern in ("grid", "ruled", "calligraphy", "cartesian", "staff"):
+    for pattern in ("grid", "mm", "ruled", "calligraphy", "cartesian", "staff"):
         img = blank()
         p = QPainter(img)
         render.draw_pattern(p, img.width(), img.height(), pattern, "white")

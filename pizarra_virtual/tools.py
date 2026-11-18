@@ -86,6 +86,7 @@ BACKGROUNDS = {
 PATTERNS = {
     "none": "Sin pauta",
     "grid": "Cuadrícula",
+    "mm": "Papel milimetrado",
     "ruled": "Hoja rayada",
     "calligraphy": "Pauta de caligrafía",
     "cartesian": "Plano cartesiano",
