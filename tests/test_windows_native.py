@@ -399,9 +399,14 @@ def test_native_mouse_mode_with_cartesian_sheet_can_return(ctrl, qapp):
     ctrl.set_pattern("cartesian")
     ctrl.set_drawing(True)
     _settle(qapp, 500)
-    point = (round(min(ov.width() - 20, 900) * dpr), round(min(ov.height() - 20, 500) * dpr))
-    sheet = _grab("cartesiano_dibujando.png").getpixel(point)
-    assert min(sheet[:3]) > 200
+    x0, y0 = round(min(ov.width() - 80, 880) * dpr), round(min(ov.height() - 80, 480) * dpr)
+    box = (x0, y0, x0 + 60, y0 + 60)  # zona sin barra ni trazos (incluye líneas de la cuadrícula)
+
+    def region(name):
+        return list(_grab(name).crop(box).convert("RGB").getdata())
+
+    sheet = region("cartesiano_dibujando.png")
+    assert sum(min(px) > 180 for px in sheet) > 0.95 * len(sheet)  # hoja clara (blanco y cuadrícula)
 
     def top_window_at(widget):
         c = widget.mapToGlobal(widget.rect().center())
@@ -416,10 +421,11 @@ def test_native_mouse_mode_with_cartesian_sheet_can_return(ctrl, qapp):
         click(tb.mode_btn)  # → «Ratón libre»
         _settle(qapp, 400)
         assert not ctrl.drawing, cycle
-        free = _grab(f"cartesiano_raton_libre_{cycle}.png").getpixel(point)
-        assert free != sheet, (cycle, sheet, free)  # se ve el escritorio, no la hoja
+        free = region(f"cartesiano_raton_libre_{cycle}.png")
+        changed = sum(a != b for a, b in zip(free, sheet))
+        assert changed > 0.5 * len(sheet), (cycle, changed, free[:3])  # se ve el escritorio, no la hoja
         assert top_window_at(tb.mode_btn) == int(tb.winId()), cycle  # la barra está encima de la hoja
         click(tb.mode_btn)  # → «Dibujando»: se puede volver
         _settle(qapp, 400)
         assert ctrl.drawing, cycle
-        assert _grab(f"cartesiano_vuelta_{cycle}.png").getpixel(point) == sheet, cycle
+        assert region(f"cartesiano_vuelta_{cycle}.png") == sheet, cycle  # la hoja vuelve igual
