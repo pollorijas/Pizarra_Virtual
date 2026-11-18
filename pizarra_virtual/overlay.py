@@ -195,6 +195,14 @@ class Overlay(QWidget):
             self.ctrl.refresh_cursor(self)
         return super().event(ev)
 
+    def closeEvent(self, ev):  # noqa: N802
+        """Alt+F4 sobre esta ventana cierra todo el programa, nunca solo esta ventana."""
+        if self.ctrl.shutting_down:
+            super().closeEvent(ev)
+            return
+        ev.ignore()
+        self.ctrl.request_close()
+
     def resizeEvent(self, ev):  # noqa: N802
         self._ensure_buffers()
         super().resizeEvent(ev)

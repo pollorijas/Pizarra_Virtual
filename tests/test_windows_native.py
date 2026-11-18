@@ -352,3 +352,30 @@ def test_native_spotlight_on_real_desktop(ctrl, qapp):
     lum = lambda px: sum(px[:3]) / 3  # noqa: E731
     assert lum(shot.getpixel(far)) < lum(before.getpixel(far)) * 0.5 + 1  # fuera del foco: oscuro
     assert abs(lum(shot.getpixel(near)) - lum(before.getpixel(near))) < 25  # dentro: igual que antes
+
+
+def test_native_real_alt_f4_removes_the_sheet_from_the_desktop(ctrl, qapp, monkeypatch):
+    """Alt+F4 real con la hoja cuadriculada: deben desaparecer la barra y la hoja."""
+    _, _, user32 = _win32()
+    calls = []
+    monkeypatch.setattr(qapp, "quit", lambda: calls.append(1))
+    ov = _overlay(ctrl)
+    dpr = ov.devicePixelRatioF()
+    ctrl.set_background("white")
+    ctrl.set_pattern("grid")
+    ctrl._raise_toolbar(activate=True)
+    _settle(qapp, 500)
+    ov_hwnd, tb_hwnd = int(ov.winId()), int(ctrl.toolbar.winId())
+    point = (round(min(ov.width() - 20, 900) * dpr), round(min(ov.height() - 20, 500) * dpr))
+    before = _grab("hoja_antes_alt_f4.png").getpixel(point)
+    assert min(before[:3]) > 200  # la hoja blanca tapa el escritorio
+    assert user32.GetForegroundWindow() == tb_hwnd
+    user32.keybd_event(0x12, 0, 0, 0)  # Alt
+    user32.keybd_event(0x73, 0, 0, 0)  # F4
+    user32.keybd_event(0x73, 0, 2, 0)
+    user32.keybd_event(0x12, 0, 2, 0)
+    _settle(qapp, 600)
+    assert calls == [1]
+    assert not user32.IsWindowVisible(ov_hwnd) and not user32.IsWindowVisible(tb_hwnd)
+    after = _grab("hoja_despues_alt_f4.png").getpixel(point)
+    assert after != before, (before, after)  # vuelve a verse el escritorio

@@ -552,6 +552,14 @@ class Toolbar(QWidget):
     def save_position(self) -> None:
         self.ctrl.settings.setValue("toolbar/pos", self.pos())
 
+    def closeEvent(self, ev):  # noqa: N802
+        """Alt+F4 sobre esta ventana cierra todo el programa, nunca solo esta ventana."""
+        if self.ctrl.shutting_down:
+            super().closeEvent(ev)
+            return
+        ev.ignore()
+        self.ctrl.request_close()
+
     def moveEvent(self, e):  # noqa: N802
         super().moveEvent(e)
         if self.isVisible():

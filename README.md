@@ -91,7 +91,7 @@ También puedes compilarlo tú mismo: ver [Compilar el .exe](#compilar-el-exe).
 6. Para **ampliar** una zona, pon el cursor encima y pulsa **Z** (o **Ctrl+Alt+Z** desde cualquier
    programa). Usa la rueda para el aumento, clic derecho y arrastrar para desplazarte, dibuja lo que
    necesites y sal con **Esc**.
-7. Para cerrar la aplicación usa el botón de apagado de la barra o *Salir* en el menú del icono de la
+7. Para cerrar la aplicación usa el botón de apagado de la barra, **Alt+F4** o *Salir* en el menú del icono de la
    bandeja.
 
 Barra de herramientas (de arriba abajo): modo dibujo · 10 herramientas · tipo de pincel (solo con el

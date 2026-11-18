@@ -87,6 +87,8 @@ class Controller(QObject):
         self.highlight = False
         self.text_editor: Overlay | None = None
         self._capturing = False
+        self._shutting_down = False
+        self._close_pending = False
         self.overlays: dict[str, Overlay] = {}
         self.last_capture: str | None = None
 
@@ -106,6 +108,7 @@ class Controller(QObject):
         app.screenAdded.connect(self._on_screen_added)
         app.screenRemoved.connect(self._remove_screen)
         app.installEventFilter(self)  # teclado para la herramienta Texto
+        app.aboutToQuit.connect(self._on_about_to_quit)
         self.state_changed.connect(self.toolbar.sync)
 
     # ================================================================== arranque / salida
@@ -134,8 +137,41 @@ class Controller(QObject):
         self.shutdown()
         self.app.quit()
 
+    @property
+    def shutting_down(self) -> bool:
+        return self._shutting_down
+
+    def request_close(self) -> None:
+        """Una ventana recibió la orden de cerrarse (Alt+F4, barra de tareas...).
+
+        Cerrar solo esa ventana dejaría el resto de la pizarra (siempre encima) sobre el
+        escritorio y sin barra para salir, así que se cierra el programa completo.
+        Se difiere para no salir desde dentro del closeEvent y para agrupar varias peticiones.
+        """
+        if self._shutting_down or self._close_pending:
+            return
+        self._close_pending = True
+
+        def run():
+            self._close_pending = False
+            self.quit()
+
+        QTimer.singleShot(0, run)
+
+    def _on_about_to_quit(self) -> None:
+        # El programa termina por otra vía (p. ej. al cerrar la sesión de Windows)
+        if not self._shutting_down:
+            try:
+                self.toolbar.save_position()
+                self._save_settings()
+            finally:
+                self.shutdown()
+
     def shutdown(self) -> None:
         """Libera atajos, temporizadores y ventanas (al salir; también lo usan las pruebas)."""
+        if self._shutting_down:
+            return
+        self._shutting_down = True
         self._fx_timer.stop()
         self.app.removeEventFilter(self)
         if self.hotkeys is not None:
@@ -388,6 +424,8 @@ class Controller(QObject):
         if self.text_editor is not None and ev.type() in (QEvent.Type.ShortcutOverride, QEvent.Type.KeyPress):
             if QApplication.activeModalWidget() is not None:  # p. ej. el selector de color
                 return False
+            if ev.key() == Qt.Key.Key_F4 and ev.modifiers() & Qt.KeyboardModifier.AltModifier:
+                return False  # Alt+F4 siempre cierra el programa, también mientras se escribe
             if ev.type() == QEvent.Type.ShortcutOverride:
                 ev.accept()  # impide que la tecla dispare un atajo; llegará como pulsación
                 return True
