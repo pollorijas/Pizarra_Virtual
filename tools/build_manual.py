@@ -17,10 +17,15 @@ import tempfile
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+WIN_FONTS = os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts")
+if sys.platform == "win32" and os.environ["QT_QPA_PLATFORM"].startswith("offscreen"):
+    # En Windows el modo «offscreen» de Qt busca las fuentes en <Qt>/lib/fonts, carpeta que
+    # PySide6 no incluye: sin esto no hay ninguna fuente y cada letra sale como un cuadrado.
+    os.environ.setdefault("QT_QPA_FONTDIR", WIN_FONTS)
 
 from PySide6.QtCore import QMarginsF, QPoint, QRect, QRectF, QSettings, Qt, QUrl  # noqa: E402
 from PySide6.QtGui import (  # noqa: E402
-    QColor, QCursor, QFont, QImage, QPageLayout, QPageSize, QPainter, QPdfWriter, QTextDocument,
+    QColor, QCursor, QFont, QFontDatabase, QFontInfo, QFontMetrics, QImage, QPageLayout, QPageSize, QPainter, QPdfWriter, QTextDocument,
 )
 from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QApplication, QBoxLayout  # noqa: E402
@@ -29,6 +34,32 @@ from pizarra_virtual import __version__, icons, session  # noqa: E402
 from pizarra_virtual.tools import PATTERNS, Tool  # noqa: E402
 
 W, H = 760, 460  # zona de las capturas de ejemplo (px lógicos)
+FAMILIES = ["Segoe UI", "Arial", "DejaVu Sans", "sans-serif"]
+# Frases que deben poder leerse (y copiarse) en el PDF generado
+REQUIRED_TEXT = ["Manual de usuario", "Atajos de teclado", "Solución de problemas", "Ratón libre", "Exportar a PDF"]
+
+
+class ManualError(RuntimeError):
+    pass
+
+
+def ui_font(point_size: float = 9.0) -> QFont:
+    f = QFont()
+    f.setFamilies(FAMILIES)
+    f.setPointSizeF(point_size)
+    return f
+
+
+def check_fonts() -> str:
+    """Comprueba que Qt tiene fuentes reales; si no, el texto saldría como cuadrados negros."""
+    families = QFontDatabase.families()
+    if not families:
+        raise ManualError("Qt no encontró ninguna fuente (QT_QPA_FONTDIR=%r)" % os.environ.get("QT_QPA_FONTDIR"))
+    fm = QFontMetrics(ui_font(12))
+    # Con la fuente de reserva todos los caracteres son cajas del mismo ancho
+    if fm.horizontalAdvance("i") >= fm.horizontalAdvance("W") or not fm.inFont("ñ"):
+        raise ManualError("La fuente elegida no tiene glifos válidos (familias: %s)" % ", ".join(families[:10]))
+    return f"{len(families)} familias; texto con «{QFontInfo(ui_font()).family()}»"
 
 
 def _drag(ov, pts, delay=6):
@@ -124,6 +155,7 @@ def build_images() -> dict[str, QImage]:
     from pizarra_virtual.app import Controller
 
     app = QApplication.instance() or QApplication([])
+    app.setFont(ui_font())  # la misma letra que la aplicación en Windows (Segoe UI)
     tmp = tempfile.mkdtemp()
     os.environ["USERPROFILE"] = tmp
     ctrl = Controller(app, settings=QSettings(os.path.join(tmp, "s.ini"), QSettings.Format.IniFormat),
@@ -207,10 +239,7 @@ def build_pdf(out: str, images: dict[str, QImage]) -> str:
     with open(os.path.join(ROOT, "docs", "manual.html"), encoding="utf-8") as f:
         html = f.read().replace("{VERSION}", __version__)
     doc = QTextDocument()
-    font = QFont()
-    font.setFamilies(["Segoe UI", "Arial", "DejaVu Sans", "sans-serif"])
-    font.setPointSizeF(10.5)
-    doc.setDefaultFont(font)
+    doc.setDefaultFont(ui_font(10.5))
     doc.setDefaultStyleSheet(
         "h1 { color: #1b3f7a; font-size: 26pt; }"
         "h2 { color: #1b3f7a; font-size: 16pt; margin-top: 16px; }"
@@ -230,11 +259,36 @@ def build_pdf(out: str, images: dict[str, QImage]) -> str:
     return out
 
 
+def verify_pdf(path: str) -> str:
+    """Lee el PDF generado y comprueba que su texto es real (no cajas sin letras)."""
+    try:
+        import pypdf
+    except ImportError:
+        return "pypdf no instalado: se omite la lectura del PDF"
+    reader = pypdf.PdfReader(path)
+    text = " ".join(
+        " ".join((page.extract_text() or "").split()) for page in reader.pages)
+    missing = [t for t in REQUIRED_TEXT if t not in text]
+    if missing:
+        raise ManualError(f"El PDF no contiene texto legible: faltan {missing} (extraídos {len(text)} caracteres)")
+    fonts = set()
+    for page in reader.pages:
+        for f in (page.get("/Resources", {}).get("/Font", {}) or {}).values():
+            fonts.add(str(f.get_object().get("/BaseFont")))
+    return f"{len(reader.pages)} páginas, {len(text)} caracteres de texto, fuentes: {', '.join(sorted(fonts))}"
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=os.path.join(ROOT, "dist", "Manual de usuario.pdf"))
     ap.add_argument("--images", help="guardar también las imágenes en esta carpeta")
     args = ap.parse_args()
+    QApplication.instance() or QApplication([])
+    try:
+        print("Fuentes:", check_fonts())
+    except ManualError as e:
+        print("ERROR:", e, file=sys.stderr)
+        return 1
     images = build_images()
     if args.images:
         os.makedirs(args.images, exist_ok=True)
@@ -242,6 +296,11 @@ def main() -> int:
             img.save(os.path.join(args.images, name))
     path = build_pdf(args.out, images)
     print("Manual generado:", path, os.path.getsize(path), "bytes")
+    try:
+        print("Comprobación:", verify_pdf(path))
+    except ManualError as e:
+        print("ERROR:", e, file=sys.stderr)
+        return 1
     return 0
 
 

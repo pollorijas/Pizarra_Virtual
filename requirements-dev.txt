@@ -2,3 +2,4 @@
 pyinstaller==6.22.3
 pytest>=8
 Pillow>=10  # solo para regenerar assets/pizarra.ico (tools/make_icon.py)
+pypdf>=4  # comprueba que el manual PDF tiene texto legible (tools/build_manual.py)
