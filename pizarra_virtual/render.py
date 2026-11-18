@@ -13,7 +13,7 @@ import math
 import random
 
 from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QBrush, QColor, QPainter, QPen, QPolygonF, QRadialGradient
+from PySide6.QtGui import QBrush, QColor, QPainter, QPainterPath, QPen, QPolygonF, QRadialGradient
 
 from .items import ClearItem, ShapeItem, StrokeItem
 from .tools import FILLABLE_SHAPES, BrushType, Tool
@@ -185,6 +185,180 @@ def _airbrush_segment(p, x0, y0, x1, y1, w, color, state: StrokeState):
         p.drawEllipse(QPointF(cx, cy), dot, dot)
 
 
+
+# --------------------------------------------------------------------------- pluma
+#
+# La pluma se dibuja como una curva suave (Bézier cuadráticas entre los puntos
+# medios de la entrada) cuyo contorno se calcula de forma exacta: círculos en
+# cada muestra unidos por sus tangentes exteriores. Todo el contorno se rellena
+# como un único QPainterPath, así el borde antialias es limpio y no hay "bultos"
+# ni esquinas. Los extremos se afinan (entrada y salida de la tinta).
+
+PEN_NIB_ANGLE = math.radians(-45)   # plumín inclinado: trazos en "/" finos, en "\\" gruesos
+PEN_DIRECTION_RANGE = 0.30          # cuánto influye la dirección en el grosor (0 = nada)
+
+
+def pen_taper_length(size: float) -> float:
+    return max(6.0, size * 2.5)
+
+
+def _signed_area(pts) -> float:
+    a = 0.0
+    for k in range(len(pts)):
+        x0, y0 = pts[k]
+        x1, y1 = pts[(k + 1) % len(pts)]
+        a += x0 * y1 - x1 * y0
+    return a / 2.0
+
+
+def _add_poly(path: QPainterPath, pts, check: bool = True) -> None:
+    # Todas las piezas con la misma orientación: con WindingFill se suman (unión), nunca se restan.
+    if check and _signed_area(pts) < 0:
+        pts = pts[::-1]
+    path.addPolygon(QPolygonF([QPointF(x, y) for x, y in pts]))
+    path.closeSubpath()
+
+
+def _circle_poly(x, y, r):
+    n = max(10, min(40, int(r * 3) + 10))
+    return [(x + r * math.cos(2 * math.pi * k / n), y + r * math.sin(2 * math.pi * k / n)) for k in range(n)]
+
+
+def _tangent_quad(x0, y0, r0, x1, y1, r1):
+    """Cuadrilátero formado por las tangentes exteriores de dos círculos (None si uno contiene al otro)."""
+    dx, dy = x1 - x0, y1 - y0
+    d = math.hypot(dx, dy)
+    if d <= abs(r0 - r1) + 1e-6:
+        return None
+    ux, uy = dx / d, dy / d
+    nx, ny = -uy, ux
+    c = (r0 - r1) / d
+    s = math.sqrt(max(0.0, 1.0 - c * c))
+    ax, ay = ux * c + nx * s, uy * c + ny * s
+    bx, by = ux * c - nx * s, uy * c - ny * s
+    return [(x0 + r0 * ax, y0 + r0 * ay), (x1 + r1 * ax, y1 + r1 * ay),
+            (x1 + r1 * bx, y1 + r1 * by), (x0 + r0 * bx, y0 + r0 * by)]
+
+
+def _mid(a, b):
+    return ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2)
+
+
+def _pen_step(*widths) -> float:
+    # Las muestras se unen con tangentes exactas, así que basta muestrear cada 1-3 px
+    # (error de cuerda < 0,2 px incluso en curvas cerradas).
+    return max(1.0, min(3.0, min(widths)))
+
+
+def _sample_line(a, b):
+    length = math.hypot(b[0] - a[0], b[1] - a[1])
+    n = max(1, min(400, math.ceil(length / _pen_step(a[2], b[2]))))
+    return [(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t)
+            for t in (k / n for k in range(n + 1))]
+
+
+def _sample_quad(a, c, b):
+    length = math.hypot(c[0] - a[0], c[1] - a[1]) + math.hypot(b[0] - c[0], b[1] - c[1])
+    n = max(1, min(400, math.ceil(length / _pen_step(a[2], b[2], c[2]))))
+    out = []
+    for k in range(n + 1):
+        t = k / n
+        u = 1 - t
+        out.append(tuple(u * u * a[j] + 2 * u * t * c[j] + t * t * b[j] for j in range(3)))
+    return out
+
+
+def pen_piece(points, i: int):
+    """Muestras de la porción de curva que se completa al llegar el punto ``i``."""
+    if i == 0:
+        return [points[0]]
+    if i == 1:
+        return _sample_line(points[0], _mid(points[0], points[1]))
+    return _sample_quad(_mid(points[i - 2], points[i - 1]), points[i - 1], _mid(points[i - 1], points[i]))
+
+
+def pen_tail(points):
+    """Último tramo (del último punto medio al punto final); se dibuja al soltar."""
+    if len(points) < 2:
+        return []
+    return _sample_line(_mid(points[-2], points[-1]), points[-1])
+
+
+def _dedupe(samples):
+    out = []
+    for sm in samples:
+        if out and abs(sm[0] - out[-1][0]) < 1e-6 and abs(sm[1] - out[-1][1]) < 1e-6:
+            if sm[2] > out[-1][2]:
+                out[-1] = sm
+            continue
+        out.append(sm)
+    return out
+
+
+def pen_outline(samples) -> QPainterPath:
+    """Contorno exacto: círculo en cada muestra unido al siguiente por sus tangentes exteriores."""
+    pts = _dedupe(samples)
+    path = QPainterPath()
+    path.setFillRule(Qt.FillRule.WindingFill)
+    if not pts:
+        return path
+    radii = [max(w / 2.0, 0.25) for _, _, w in pts]
+    n = len(pts)
+    quads = [_tangent_quad(pts[k][0], pts[k][1], radii[k], pts[k + 1][0], pts[k + 1][1], radii[k + 1])
+             for k in range(n - 1)]
+    for k in range(n):
+        # Círculo en cada muestra: garantiza uniones redondeadas y sin rendijas aunque el
+        # grosor cambie de una muestra a la siguiente (las tangentes no coinciden entonces).
+        _add_poly(path, _circle_poly(pts[k][0], pts[k][1], radii[k]), check=False)
+    for quad in quads:
+        if quad is not None:
+            _add_poly(path, quad)
+    return path
+
+
+def _fill_pen(p: QPainter, samples, color: QColor) -> None:
+    if samples:
+        p.fillPath(pen_outline(samples), color)
+
+
+def pen_stroke_samples(points):
+    if len(points) == 1:
+        return [points[0]]
+    dense = []
+    for i in range(1, len(points)):
+        dense += pen_piece(points, i)
+    dense = _dedupe(dense + pen_tail(points))
+    # Diezmado: una muestra cada ~1-3 px basta porque se unen con tangentes exactas.
+    out = [dense[0]]
+    for sm in dense[1:-1]:
+        last = out[-1]
+        if math.hypot(sm[0] - last[0], sm[1] - last[1]) >= _pen_step(sm[2], last[2]) * 0.9:
+            out.append(sm)
+    if len(dense) > 1:
+        out.append(dense[-1])
+    return out
+
+
+def finalize_pen(item: StrokeItem) -> None:
+    """Afina la salida del trazo (como cuando se levanta la pluma del papel)."""
+    pts = item.points
+    if not pts:
+        return
+    total = sum(math.hypot(pts[k + 1][0] - pts[k][0], pts[k + 1][1] - pts[k][1]) for k in range(len(pts) - 1))
+    if total < 2.0:  # un toque: punto redondo de tamaño normal
+        item.points = [(x, y, item.size * 0.9) for x, y, _ in pts]
+        return
+    length = min(pen_taper_length(item.size), total / 2.0)
+    acc = 0.0
+    for k in range(len(pts) - 1, -1, -1):
+        if k < len(pts) - 1:
+            acc += math.hypot(pts[k + 1][0] - pts[k][0], pts[k + 1][1] - pts[k][1])
+        if acc >= length:
+            break
+        x, y, w = pts[k]
+        pts[k] = (x, y, max(0.5, w * (0.35 + 0.65 * acc / length)))
+
+
 # --------------------------------------------------------------------------- trazos
 
 
@@ -205,7 +379,7 @@ def draw_segment(p: QPainter, item: StrokeItem, i: int, state: StrokeState) -> N
     elif tool == Tool.HIGHLIGHTER:
         _chisel_segment(p, x0, y0, x1, y1, w1, color)
     elif tool == Tool.PEN:
-        _variable_segment(p, x0, y0, w0, x1, y1, w1, color)
+        _fill_pen(p, pen_piece(pts, i), color)
     else:  # pincel
         bt = item.brush
         if bt == BrushType.SOFT:
@@ -222,6 +396,12 @@ def draw_segment(p: QPainter, item: StrokeItem, i: int, state: StrokeState) -> N
 
 def segment_rect(item: StrokeItem, i: int) -> QRectF:
     pts = item.points
+    if item.tool == Tool.PEN:  # la pieza de curva abarca los puntos i-2 .. i
+        sub = pts[max(0, i - 2): i + 1]
+        m = max(pt[2] for pt in sub) / 2 + 3
+        xs = [pt[0] for pt in sub]
+        ys = [pt[1] for pt in sub]
+        return QRectF(min(xs) - m, min(ys) - m, max(xs) - min(xs) + 2 * m, max(ys) - min(ys) + 2 * m)
     x1, y1, w1 = pts[i]
     x0, y0, w0 = pts[i - 1] if i > 0 else pts[i]
     m = max(w0, w1) / 2 + 3
@@ -231,6 +411,9 @@ def segment_rect(item: StrokeItem, i: int) -> QRectF:
 
 
 def draw_stroke(p: QPainter, item: StrokeItem) -> None:
+    if item.tool == Tool.PEN:
+        _fill_pen(p, pen_stroke_samples(item.points), item_color(item))
+        return
     state = StrokeState(item.seed)
     for i in range(len(item.points)):
         draw_segment(p, item, i, state)

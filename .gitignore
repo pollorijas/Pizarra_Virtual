@@ -31,3 +31,6 @@ htmlcov/
 Thumbs.db
 Desktop.ini
 .DS_Store
+
+# Capturas generadas por las pruebas nativas de Windows
+test-screens/

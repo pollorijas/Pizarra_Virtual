@@ -53,7 +53,7 @@ class ToolSpec:
 TOOL_SPECS: dict[Tool, ToolSpec] = {
     Tool.BRUSH: ToolSpec("Pincel", "1", "brush", 10, 1, 150, 100),
     Tool.PENCIL: ToolSpec("Lápiz", "2", "pencil", 2, 1, 8, 100),
-    Tool.PEN: ToolSpec("Pluma", "3", "pen", 6, 1, 40, 100),
+    Tool.PEN: ToolSpec("Pluma", "3", "pen", 3, 1, 30, 100),
     Tool.HIGHLIGHTER: ToolSpec("Destacador", "4", "highlighter", 24, 6, 90, 40),
     Tool.ERASER: ToolSpec("Goma de borrar", "5", "eraser", 30, 4, 250, 100, has_opacity=False),
     Tool.RECT: ToolSpec("Rectángulo / cuadrado", "6", "rect", 4, 1, 40, 100),

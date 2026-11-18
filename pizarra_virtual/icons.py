@@ -196,6 +196,17 @@ def _help(p, c):
     p.drawText(QRectF(3, 3, 18, 18), Qt.AlignmentFlag.AlignCenter, "?")
 
 
+def _zoom(p, c):
+    p.setPen(_pen(c, 2))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawEllipse(QPointF(10, 10), 6.5, 6.5)
+    p.setPen(_pen(c, 2.8))
+    p.drawLine(QPointF(15, 15), QPointF(21, 21))
+    p.setPen(_pen(c, 1.7))
+    p.drawLine(QPointF(7, 10), QPointF(13, 10))
+    p.drawLine(QPointF(10, 7), QPointF(10, 13))
+
+
 def _chevron_up(p, c):
     p.setPen(_pen(c, 2))
     p.drawPolyline(_poly((6, 15), (12, 9), (18, 15)))
@@ -211,7 +222,7 @@ _ICONS = {
     "eraser": _eraser, "rect": _rect, "ellipse": _ellipse, "triangle": _triangle,
     "line": _line, "arrow": _arrow, "undo": _undo, "redo": _redo, "trash": _trash,
     "camera": _camera, "folder": _folder, "eye": _eye, "eye_off": _eye_off, "power": _power,
-    "mouse": _mouse, "help": _help, "chevron_up": _chevron_up, "chevron_down": _chevron_down,
+    "mouse": _mouse, "help": _help, "zoom": _zoom, "chevron_up": _chevron_up, "chevron_down": _chevron_down,
 }
 
 

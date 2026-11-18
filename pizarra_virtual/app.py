@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import logging
 
-from PySide6.QtCore import QObject, QSettings, Qt, QTimer, Signal
+from PySide6.QtCore import QObject, QPointF, QSettings, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QColor, QCursor, QGuiApplication
 from PySide6.QtWidgets import QApplication, QMenu, QMessageBox, QSystemTrayIcon
 
@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 
 CAPTURE_DELAY_MS = 250  # tiempo para que Windows retire la superposición antes de capturar
 
-VK_D, VK_H, VK_S = 0x44, 0x48, 0x53
+VK_D, VK_H, VK_S, VK_Z = 0x44, 0x48, 0x53, 0x5A
 
 
 def screen_key(screen) -> str:
@@ -100,6 +100,7 @@ class Controller(QObject):
         combos = [
             (MOD_CONTROL | MOD_ALT, VK_D, "Ctrl+Alt+D", self.toggle_drawing),
             (MOD_CONTROL | MOD_ALT, VK_H, "Ctrl+Alt+H", self.toggle_visible),
+            (MOD_CONTROL | MOD_ALT, VK_Z, "Ctrl+Alt+Z", self.toggle_zoom),
             (MOD_CONTROL | MOD_ALT, VK_S, "Ctrl+Alt+S", lambda: self.capture(with_drawing=True)),
             (MOD_CONTROL | MOD_ALT | MOD_SHIFT, VK_S, "Ctrl+Alt+Shift+S",
              lambda: self.capture(with_drawing=False)),
@@ -209,7 +210,8 @@ class Controller(QObject):
 
     def refresh_cursor(self, ov: Overlay) -> None:
         if self.drawing:
-            ov.setCursor(make_tool_cursor(self.tool, self.sizes[self.tool], ov.devicePixelRatioF() or 1.0))
+            size = self.sizes[self.tool] * ov.zoom_factor  # con zoom el trazo se ve más grande
+            ov.setCursor(make_tool_cursor(self.tool, size, ov.devicePixelRatioF() or 1.0))
         else:
             ov.unsetCursor()
 
@@ -252,11 +254,77 @@ class Controller(QObject):
 
     def toggle_visible(self) -> None:
         if self.visible:
+            for ov in self.overlays.values():
+                ov.end_zoom()
             self._set_visible(False)
             self.drawing = False
         else:
             self._set_visible(True)
         self._changed()
+
+    def escape(self) -> None:
+        """Esc: primero sale del zoom; si no hay zoom, pasa a «Ratón libre»."""
+        if self.zoom_active:
+            self.exit_zoom()
+        else:
+            self.set_drawing(False)
+
+    # ================================================================== zoom
+
+    @property
+    def zoom_active(self) -> bool:
+        return any(ov.zoom_active for ov in self.overlays.values())
+
+    def toggle_zoom(self) -> None:
+        if self.zoom_active:
+            self.exit_zoom()
+        else:
+            self.start_zoom()
+
+    def start_zoom(self) -> None:
+        """Congela la pantalla bajo el cursor y la muestra ampliada para señalar detalles."""
+        if self._capturing:
+            return
+        screen = self.current_screen()
+        ov = self.overlay_for_screen(screen)
+        if ov is None:
+            return
+        self._capturing = True
+        self._finish_all()
+        anchor = QPointF(ov.mapFromGlobal(QCursor.pos()))
+        toolbar_visible = self.toolbar.isVisible()
+        self.toolbar.hide()
+        ov.hide()
+        QTimer.singleShot(CAPTURE_DELAY_MS, lambda: self._do_start_zoom(screen, ov, anchor, toolbar_visible))
+
+    def _do_start_zoom(self, screen, ov: Overlay, anchor: QPointF, toolbar_visible: bool) -> None:
+        try:
+            shot = capture.grab_screen(screen)
+            if shot.isNull():
+                raise OSError("No se pudo capturar la pantalla")
+            self.visible = True
+            self.drawing = True
+            ov.start_zoom(shot, anchor)
+        except Exception as exc:  # pragma: no cover - errores del sistema
+            log.exception("No se pudo iniciar el zoom")
+            self.notify("Error al hacer zoom", str(exc), error=True)
+        finally:
+            for o in self.overlays.values():
+                if self.visible:
+                    o.show()
+                    o.apply_input_mode()
+            if toolbar_visible or self.drawing:
+                self._raise_toolbar(activate=self.drawing)
+            self._capturing = False
+            self._changed(cursor=True)
+
+    def exit_zoom(self) -> None:
+        for ov in self.overlays.values():
+            ov.end_zoom()
+        self._changed(cursor=True)
+
+    def zoom_changed(self, ov: Overlay) -> None:
+        self.state_changed.emit()
 
     def _raise_toolbar(self, activate: bool = False) -> None:
         if not self.toolbar.isVisible():
@@ -346,11 +414,15 @@ class Controller(QObject):
         try:
             parts = []
             for s in screens:
-                shot = capture.grab_screen(s)
-                if with_drawing:
-                    ov = self.overlay_for_screen(s)
-                    shot = capture.compose_drawing(shot, ov.canvas if ov else None,
-                                                   self.background_color(interactive=False))
+                ov = self.overlay_for_screen(s)
+                if ov is not None and ov.zoom_active:
+                    # En zoom se guarda exactamente la vista ampliada.
+                    shot = ov.render_view(with_drawing)
+                else:
+                    shot = capture.grab_screen(s)
+                    if with_drawing:
+                        shot = capture.compose_drawing(shot, ov.canvas if ov else None,
+                                                       self.background_color(interactive=False))
                 parts.append((s.geometry(), shot))
             img = capture.stitch(parts)
             path = capture.save_capture(img)
@@ -389,6 +461,9 @@ class Controller(QObject):
         self._tray_visible.triggered.connect(lambda _c: self.toggle_visible())
         menu.addAction(self._tray_draw)
         menu.addAction(self._tray_visible)
+        zoom_act = QAction("Zoom de pantalla\tCtrl+Alt+Z", menu)
+        zoom_act.triggered.connect(self.toggle_zoom)
+        menu.addAction(zoom_act)
         menu.addSeparator()
         cap_menu = self.build_capture_menu(menu, icon_color="#444444")
         cap_menu.setTitle("Captura de pantalla")
@@ -483,6 +558,7 @@ HELP_HTML = """
 <tr><td colspan="2"><b>Atajos globales</b> (funcionan desde cualquier aplicación)</td></tr>
 <tr><td><b>Ctrl+Alt+D</b></td><td>Activar / desactivar el dibujo</td></tr>
 <tr><td><b>Ctrl+Alt+H</b></td><td>Mostrar / ocultar la pizarra</td></tr>
+<tr><td><b>Ctrl+Alt+Z</b></td><td>Zoom: ampliar la zona de la pantalla bajo el cursor</td></tr>
 <tr><td><b>Ctrl+Alt+S</b></td><td>Captura de la pantalla actual con el trazado</td></tr>
 <tr><td><b>Ctrl+Alt+Shift+S</b></td><td>Captura de la pantalla actual sin el trazado</td></tr>
 <tr><td colspan="2"><br><b>Herramientas</b> (en modo dibujo)</td></tr>
@@ -497,7 +573,12 @@ HELP_HTML = """
 <tr><td><b>Clic derecho</b></td><td>Cancelar el trazo o figura en curso</td></tr>
 <tr><td><b>Ctrl+Z / Ctrl+Y</b></td><td>Deshacer / rehacer</td></tr>
 <tr><td><b>Supr</b></td><td>Borrar todo</td></tr>
-<tr><td><b>Esc</b></td><td>Pasar a «Ratón libre»</td></tr>
+<tr><td><b>Z</b></td><td>Activar / salir del zoom</td></tr>
+<tr><td colspan="2"><br><b>En zoom</b></td></tr>
+<tr><td><b>Rueda</b></td><td>Acercar / alejar (centrado en el cursor)</td></tr>
+<tr><td><b>Clic derecho / central y arrastrar</b></td><td>Mover la vista</td></tr>
+<tr><td><b>Ctrl + rueda</b></td><td>Grosor de la herramienta</td></tr>
+<tr><td><b>Esc</b></td><td>Salir del zoom (fuera del zoom: pasar a «Ratón libre»)</td></tr>
 <tr><td><b>F1</b></td><td>Esta ayuda</td></tr>
 </table>
 <p>Las capturas se guardan en:<br><code>{folder}</code></p>

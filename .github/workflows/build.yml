@@ -26,10 +26,29 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
 
-      - name: Pruebas
+      - name: Pruebas (pantalla virtual)
         env:
           QT_QPA_PLATFORM: offscreen
         run: python -m pytest -q
+
+      - name: Pruebas con ventanas reales de Windows (100 %)
+        env:
+          QT_QPA_PLATFORM: windows
+        run: python -m pytest -q -rs
+
+      - name: Pruebas con ventanas reales de Windows (escalado 150 %)
+        env:
+          QT_QPA_PLATFORM: windows
+          QT_SCALE_FACTOR: "1.5"
+        run: python -m pytest -q -rs
+
+      - name: Subir capturas de las pruebas
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capturas-de-pruebas
+          path: test-screens/
+          if-no-files-found: ignore
 
       - name: Compilar el ejecutable
         run: pyinstaller --noconfirm --clean PizarraVirtual.spec

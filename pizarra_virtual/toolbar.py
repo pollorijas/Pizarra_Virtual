@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 from PySide6.QtCore import QPoint, QSize, Qt
 from PySide6.QtGui import QColor, QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QButtonGroup, QColorDialog, QComboBox, QFrame, QGridLayout, QHBoxLayout, QLabel, QMenu,
+    QButtonGroup, QColorDialog, QComboBox, QFrame, QGridLayout, QHBoxLayout, QLabel, QLayout,
     QPushButton, QSizePolicy, QSlider, QToolButton, QVBoxLayout, QWidget,
 )
 
@@ -102,8 +102,13 @@ class Toolbar(QWidget):
     def _build(self) -> None:
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
+        # La ventana adopta SIEMPRE el tamaño exacto de su contenido: al plegar la barra
+        # se encoge la ventana (no solo su interior) y al desplegarla vuelve a crecer.
+        outer.setSizeConstraint(QLayout.SizeConstraint.SetFixedSize)
         panel = QFrame(self)
         panel.setObjectName("panel")
+        panel.setFixedWidth(PANEL_WIDTH)
+        self.panel = panel
         outer.addWidget(panel)
         lay = QVBoxLayout(panel)
         lay.setContentsMargins(8, 6, 8, 8)
@@ -249,16 +254,19 @@ class Toolbar(QWidget):
         self.hide_btn = self._tool_button("eye_off", "Ocultar la pizarra (Ctrl+Alt+H)")
         self.hide_btn.clicked.connect(self.ctrl.toggle_visible)
 
+        self.zoom_btn = self._tool_button("zoom", "Zoom: ampliar la zona bajo el cursor (Z / Ctrl+Alt+Z)",
+                                          checkable=True)
+        self.zoom_btn.clicked.connect(lambda: self.ctrl.toggle_zoom())
+
         help_btn = self._tool_button("help", "Ayuda y atajos de teclado (F1)")
         help_btn.clicked.connect(self.ctrl.show_help)
         quit_btn = self._tool_button("power", "Salir de Pizarra Virtual")
         quit_btn.clicked.connect(self.ctrl.quit)
 
-        for idx, b in enumerate((undo, redo, clear, capture, folder, self.hide_btn, help_btn, quit_btn)):
+        buttons = (undo, redo, clear, self.zoom_btn, capture, folder, self.hide_btn, help_btn, quit_btn)
+        for idx, b in enumerate(buttons):
             actions.addWidget(b, idx // 3, idx % 3)
         body.addLayout(actions)
-
-        self.setFixedWidth(PANEL_WIDTH)
 
     def _build_shortcuts(self) -> None:
         c = self.ctrl
@@ -282,7 +290,9 @@ class Toolbar(QWidget):
         add("Ctrl+Y", c.redo)
         add("Ctrl+Shift+Z", c.redo)
         add("Del", c.clear_all)
-        add("Esc", lambda: c.set_drawing(False))
+        add("Esc", c.escape)
+        add("Z", c.toggle_zoom)
+        add("Ctrl+Alt+Z", c.toggle_zoom)
         add("F1", c.show_help)
         # Duplicados locales de los atajos globales (útiles si el registro global falla).
         add("Ctrl+Alt+D", c.toggle_drawing)
@@ -297,10 +307,48 @@ class Toolbar(QWidget):
         if dlg_color.isValid():
             self.ctrl.set_color(dlg_color)
 
+    @property
+    def collapsed(self) -> bool:
+        return self.body.isHidden()
+
+    def set_collapsed(self, collapsed: bool) -> None:
+        self.body.setHidden(collapsed)
+        self.collapse_btn.setIcon(icons.icon("chevron_down" if collapsed else "chevron_up"))
+        self.collapse_btn.setToolTip("Desplegar la barra" if collapsed else "Plegar la barra")
+        self.refit()
+        self.ctrl.settings.setValue("toolbar/collapsed", "true" if collapsed else "false")
+        self.keep_on_screen()
+
     def toggle_collapsed(self) -> None:
-        self.body.setVisible(not self.body.isVisible())
-        self.collapse_btn.setIcon(icons.icon("chevron_up" if self.body.isVisible() else "chevron_down"))
-        self.adjustSize()
+        self.set_collapsed(not self.collapsed)
+
+    def refit(self) -> None:
+        """Ajusta la ventana al contenido visible, inmediatamente.
+
+        Qt guarda en caché el tamaño preferido de cada sección dentro del layout que la
+        contiene; si ese valor se consultó antes de ocultar algo (Windows lo hace, p. ej.
+        al mover o activar la ventana), la ventana conservaba el tamaño antiguo y solo
+        se reducía su contenido. Aquí se vacían esas cachés (updateGeometry) y se
+        invalidan los tres niveles antes de recalcular.
+        """
+        for w in (self.body, self.panel):
+            w.updateGeometry()
+        for lay in (self.body.layout(), self.panel.layout(), self.layout()):
+            lay.invalidate()
+        self.layout().activate()
+        hint = self.layout().totalSizeHint()
+        if self.size() != hint:
+            self.setFixedSize(hint)
+
+    def keep_on_screen(self) -> None:
+        """Si al desplegarse la barra se sale de la pantalla, la vuelve a meter."""
+        screen = self.screen() or QGuiApplication.primaryScreen()
+        avail = screen.availableGeometry()
+        geo = self.frameGeometry()
+        x = min(max(geo.left(), avail.left()), avail.right() - geo.width() + 1)
+        y = min(max(geo.top(), avail.top()), avail.bottom() - geo.height() + 1)
+        if (x, y) != (geo.left(), geo.top()):
+            self.move(x, y)
 
     # ------------------------------------------------------------------ estado
 
@@ -339,15 +387,18 @@ class Toolbar(QWidget):
             self.bg_combo.setCurrentIndex(max(0, self.bg_combo.findData(c.background)))
             self.hide_btn.setIcon(icons.icon("eye_off" if c.visible else "eye"))
             self.hide_btn.setToolTip(("Ocultar" if c.visible else "Mostrar") + " la pizarra (Ctrl+Alt+H)")
+            self.zoom_btn.setChecked(c.zoom_active)
         finally:
             for w in widgets:
                 w.blockSignals(False)
-        self.adjustSize()
+        self.refit()
 
     # ------------------------------------------------------------------ posición
 
     def restore_position(self) -> None:
-        self.adjustSize()
+        if str(self.ctrl.settings.value("toolbar/collapsed", "false")).lower() == "true":
+            self.set_collapsed(True)
+        self.refit()
         pos = self.ctrl.settings.value("toolbar/pos")
         if isinstance(pos, QPoint):
             for s in QGuiApplication.screens():
