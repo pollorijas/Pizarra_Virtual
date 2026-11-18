@@ -36,7 +36,8 @@ def test_collapse_shrinks_the_window_itself(ctrl, qapp):
     # La VENTANA (no solo su contenido) se reduce a la cabecera.
     assert small.height() < 60, small
     assert tb.windowHandle().geometry().height() < 60
-    assert small.width() == full.width()
+    if not tb.horizontal:
+        assert small.width() == full.width()
     assert small.topLeft() == full.topLeft()
     tb.toggle_collapsed()
     qapp.processEvents()
@@ -276,8 +277,10 @@ def test_zoom_capture_saves_the_zoomed_view(ctrl, qapp, tmp_path):
     QTest.mouseRelease(ov, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, QPoint(200, 100))
     view = ov.render_view(True)
     assert view.size() == ov.canvas.size()
+    d = ov.devicePixelRatioF()  # la vista está en píxeles físicos
     # el trazo de 10 px se ve de 20 px en la vista ampliada
-    assert view.pixelColor(150, 100).red() > 200 and view.pixelColor(150, 108).red() > 200
+    assert view.pixelColor(round(150 * d), round(100 * d)).red() > 200
+    assert view.pixelColor(round(150 * d), round(108 * d)).red() > 200
     ctrl.capture(with_drawing=True)
     QTest.qWait(600)
     files = list((tmp_path / "Pictures" / "Capturas Pizarra").glob("*.png"))
@@ -297,3 +300,33 @@ def test_hiding_or_mouse_mode_ends_zoom(ctrl, qapp):
     assert ctrl.drawing
     ctrl.toggle_zoom()
     assert not ov.zoom_active
+
+
+def test_toolbar_uses_two_columns_when_screen_is_short(ctrl, qapp, monkeypatch):
+    """En pantallas bajas (p. ej. 1366x768 al 150 %) la barra pasa a dos columnas y cabe entera."""
+    from PySide6.QtCore import QRect
+
+    tb = ctrl.toolbar
+    screen = tb._current_screen()
+    real = screen.availableGeometry()
+    from pizarra_virtual.toolbar import COL_WIDTH
+
+    short = QRect(real.left(), real.top(), real.width(), min(real.height(), 470))
+    monkeypatch.setattr(type(screen), "availableGeometry", lambda self: short)
+    tb.update_orientation()
+    assert tb.horizontal
+    geo = tb.frameGeometry()
+    assert geo.height() <= short.height() and geo.top() >= short.top() and geo.bottom() <= short.bottom()
+    assert geo.width() > 2 * COL_WIDTH  # dos columnas lado a lado
+    # plegar y desplegar sigue funcionando en dos columnas
+    tb.toggle_collapsed()
+    assert tb.height() < 60
+    tb.toggle_collapsed()
+    assert tb.horizontal and tb.frameGeometry().height() <= short.height()
+    # cambiar de herramienta no cambia la disposición
+    ctrl.set_tool(Tool.RECT)
+    ctrl.set_tool(Tool.BRUSH)
+    assert tb.horizontal and tb.frameGeometry().bottom() <= short.bottom()
+    monkeypatch.undo()
+    tb.update_orientation()
+    assert not tb.horizontal or real.height() < 700

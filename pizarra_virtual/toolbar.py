@@ -3,10 +3,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import QPoint, QSize, Qt
+from PySide6.QtCore import QPoint, QSize, Qt, QTimer
 from PySide6.QtGui import QColor, QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QButtonGroup, QColorDialog, QComboBox, QFrame, QGridLayout, QHBoxLayout, QLabel, QLayout,
+    QBoxLayout, QButtonGroup, QColorDialog, QComboBox, QFrame, QGridLayout, QHBoxLayout, QLabel, QLayout,
     QPushButton, QSizePolicy, QSlider, QToolButton, QVBoxLayout, QWidget,
 )
 
@@ -41,7 +41,7 @@ QMenu::item:selected { background: #2f6fd1; }
 """
 
 BTN = 32
-PANEL_WIDTH = 3 * BTN + 2 * 4 + 2 * 8 + 2
+COL_WIDTH = 3 * BTN + 2 * 4
 
 
 class _Header(QWidget):
@@ -86,6 +86,10 @@ class Toolbar(QWidget):
         self._build()
         self._build_shortcuts()
         self.sync()
+        self.winId()  # ventana nativa: permite saber cuándo pasa a otro monitor
+        if self.windowHandle() is not None:
+            # Al llevar la barra a otra pantalla se recalcula si cabe en una columna.
+            self.windowHandle().screenChanged.connect(lambda *_: QTimer.singleShot(0, self.update_orientation))
 
     # ------------------------------------------------------------------ construcción
 
@@ -107,7 +111,6 @@ class Toolbar(QWidget):
         outer.setSizeConstraint(QLayout.SizeConstraint.SetFixedSize)
         panel = QFrame(self)
         panel.setObjectName("panel")
-        panel.setFixedWidth(PANEL_WIDTH)
         self.panel = panel
         outer.addWidget(panel)
         lay = QVBoxLayout(panel)
@@ -116,6 +119,7 @@ class Toolbar(QWidget):
 
         # Cabecera (arrastrar + plegar)
         header = _Header(self)
+        header.setMinimumWidth(COL_WIDTH)
         hl = QHBoxLayout(header)
         hl.setContentsMargins(0, 0, 0, 0)
         title = QLabel("⠿ Pizarra")
@@ -129,10 +133,23 @@ class Toolbar(QWidget):
         hl.addWidget(self.collapse_btn)
         lay.addWidget(header)
 
+        # Cuerpo en dos bloques. En pantallas bajas (p. ej. 1366x768 al 150 %) la barra no
+        # cabe en vertical, así que los bloques se colocan uno al lado del otro.
         self.body = QWidget()
-        body = QVBoxLayout(self.body)
-        body.setContentsMargins(0, 0, 0, 0)
-        body.setSpacing(6)
+        self.body_layout = QBoxLayout(QBoxLayout.Direction.TopToBottom, self.body)
+        self.body_layout.setContentsMargins(0, 0, 0, 0)
+        self.body_layout.setSpacing(6)
+        columns = []
+        for _ in range(2):
+            col = QWidget()
+            col.setFixedWidth(COL_WIDTH)
+            col_lay = QVBoxLayout(col)
+            col_lay.setContentsMargins(0, 0, 0, 0)
+            col_lay.setSpacing(6)
+            self.body_layout.addWidget(col, 0, Qt.AlignmentFlag.AlignTop)
+            columns.append(col_lay)
+        self._columns = [lay_.parentWidget() for lay_ in columns]
+        c1, c2 = columns
         lay.addWidget(self.body)
 
         # Modo dibujo / ratón libre
@@ -147,7 +164,7 @@ class Toolbar(QWidget):
         self.mode_btn.setToolTip("Activar / desactivar el dibujo (Ctrl+Alt+D).\n"
                                  "En «Ratón libre» los clics llegan a las ventanas de debajo.")
         self.mode_btn.clicked.connect(lambda: self.ctrl.toggle_drawing())
-        body.addWidget(self.mode_btn)
+        c1.addWidget(self.mode_btn)
 
         # Herramientas
         grid = QGridLayout()
@@ -161,7 +178,7 @@ class Toolbar(QWidget):
             self.tool_group.addButton(b)
             self.tool_buttons[tool] = b
             grid.addWidget(b, idx // 3, idx % 3)
-        body.addLayout(grid)
+        c1.addLayout(grid)
 
         # Tipo de pincel
         self.brush_combo = QComboBox()
@@ -171,7 +188,7 @@ class Toolbar(QWidget):
             self.brush_combo.addItem(label, bt.value)
         self.brush_combo.currentIndexChanged.connect(
             lambda i: self.ctrl.set_brush_type(BrushType(self.brush_combo.itemData(i))))
-        body.addWidget(self.brush_combo)
+        c1.addWidget(self.brush_combo)
 
         # Relleno de figuras
         self.fill_btn = QToolButton()
@@ -182,7 +199,7 @@ class Toolbar(QWidget):
         self.fill_btn.setFixedHeight(24)
         self.fill_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.fill_btn.clicked.connect(lambda c: self.ctrl.set_fill(c))
-        body.addWidget(self.fill_btn)
+        c1.addWidget(self.fill_btn)
 
         # Color
         self.color_btn = QPushButton()
@@ -191,7 +208,7 @@ class Toolbar(QWidget):
         self.color_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.color_btn.setToolTip("Elegir color personalizado [C]")
         self.color_btn.clicked.connect(self.pick_color)
-        body.addWidget(self.color_btn)
+        c1.addWidget(self.color_btn)
 
         sw = QGridLayout()
         sw.setSpacing(4)
@@ -204,37 +221,37 @@ class Toolbar(QWidget):
             b.setStyleSheet(f"background: {hexcolor};")
             b.clicked.connect(lambda _=False, c=hexcolor: self.ctrl.set_color(QColor(c)))
             sw.addWidget(b, idx // 4, idx % 4)
-        body.addLayout(sw)
+        c1.addLayout(sw)
 
         # Grosor
         self.size_label = QLabel()
-        body.addWidget(self.size_label)
+        c2.addWidget(self.size_label)
         self.size_slider = QSlider(Qt.Orientation.Horizontal)
         self.size_slider.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.size_slider.setToolTip("Grosor (rueda del ratón sobre la pizarra, o teclas + / -)")
         self.size_slider.valueChanged.connect(lambda v: self.ctrl.set_size(v))
-        body.addWidget(self.size_slider)
+        c2.addWidget(self.size_slider)
 
         # Opacidad
         self.opacity_label = QLabel()
-        body.addWidget(self.opacity_label)
+        c2.addWidget(self.opacity_label)
         self.opacity_slider = QSlider(Qt.Orientation.Horizontal)
         self.opacity_slider.setRange(5, 100)
         self.opacity_slider.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.opacity_slider.setToolTip("Opacidad (Mayús + rueda del ratón)")
         self.opacity_slider.valueChanged.connect(lambda v: self.ctrl.set_opacity(v))
-        body.addWidget(self.opacity_slider)
+        c2.addWidget(self.opacity_slider)
 
         # Fondo
         bg_label = QLabel("Fondo")
-        body.addWidget(bg_label)
+        c2.addWidget(bg_label)
         self.bg_combo = QComboBox()
         self.bg_combo.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         for key, label in BACKGROUNDS.items():
             self.bg_combo.addItem(label, key)
         self.bg_combo.currentIndexChanged.connect(
             lambda i: self.ctrl.set_background(self.bg_combo.itemData(i)))
-        body.addWidget(self.bg_combo)
+        c2.addWidget(self.bg_combo)
 
         # Acciones
         actions = QGridLayout()
@@ -266,7 +283,7 @@ class Toolbar(QWidget):
         buttons = (undo, redo, clear, self.zoom_btn, capture, folder, self.hide_btn, help_btn, quit_btn)
         for idx, b in enumerate(buttons):
             actions.addWidget(b, idx // 3, idx % 3)
-        body.addLayout(actions)
+        c2.addLayout(actions)
 
     def _build_shortcuts(self) -> None:
         c = self.ctrl
@@ -315,9 +332,8 @@ class Toolbar(QWidget):
         self.body.setHidden(collapsed)
         self.collapse_btn.setIcon(icons.icon("chevron_down" if collapsed else "chevron_up"))
         self.collapse_btn.setToolTip("Desplegar la barra" if collapsed else "Plegar la barra")
-        self.refit()
         self.ctrl.settings.setValue("toolbar/collapsed", "true" if collapsed else "false")
-        self.keep_on_screen()
+        self.update_orientation()
 
     def toggle_collapsed(self) -> None:
         self.set_collapsed(not self.collapsed)
@@ -331,22 +347,53 @@ class Toolbar(QWidget):
         se reducía su contenido. Aquí se vacían esas cachés (updateGeometry) y se
         invalidan los tres niveles antes de recalcular.
         """
-        for w in (self.body, self.panel):
+        containers = [*self._columns, self.body, self.panel]  # de dentro hacia fuera
+        for w in containers:
             w.updateGeometry()
-        for lay in (self.body.layout(), self.panel.layout(), self.layout()):
-            lay.invalidate()
+            w.layout().invalidate()
+        self.layout().invalidate()
         self.layout().activate()
         hint = self.layout().totalSizeHint()
         if self.size() != hint:
             self.setFixedSize(hint)
 
+    def _current_screen(self):
+        return (QGuiApplication.screenAt(self.frameGeometry().topLeft())
+                or QGuiApplication.screenAt(self.frameGeometry().center())
+                or self.screen() or QGuiApplication.primaryScreen())
+
+    @property
+    def horizontal(self) -> bool:
+        return self.body_layout.direction() == QBoxLayout.Direction.LeftToRight
+
+    def update_orientation(self) -> None:
+        """Una columna si la barra cabe en la altura de su pantalla; si no, dos columnas."""
+        if self.collapsed:
+            self.refit()
+        else:
+            avail = self._current_screen().availableGeometry()
+            # Se mide con TODAS las opciones visibles (tipo de pincel, relleno, opacidad) para
+            # que la disposición no dependa de la herramienta activa ni cambie al cambiarla.
+            optional = (self.brush_combo, self.fill_btn, self.opacity_label, self.opacity_slider)
+            hidden = [w for w in optional if w.isHidden()]
+            for w in hidden:
+                w.setVisible(True)
+            self.body_layout.setDirection(QBoxLayout.Direction.TopToBottom)
+            self.refit()
+            needed = self.height()
+            for w in hidden:
+                w.setVisible(False)
+            if needed > avail.height():
+                self.body_layout.setDirection(QBoxLayout.Direction.LeftToRight)
+            self.refit()
+        self.keep_on_screen()
+
     def keep_on_screen(self) -> None:
-        """Si al desplegarse la barra se sale de la pantalla, la vuelve a meter."""
-        screen = self.screen() or QGuiApplication.primaryScreen()
-        avail = screen.availableGeometry()
+        """Mantiene la barra dentro de la pantalla (y la cabecera siempre visible)."""
+        avail = self._current_screen().availableGeometry()
         geo = self.frameGeometry()
-        x = min(max(geo.left(), avail.left()), avail.right() - geo.width() + 1)
-        y = min(max(geo.top(), avail.top()), avail.bottom() - geo.height() + 1)
+        x = max(avail.left(), min(geo.left(), avail.right() - geo.width() + 1))
+        y = max(avail.top(), min(geo.top(), avail.bottom() - geo.height() + 1))
         if (x, y) != (geo.left(), geo.top()):
             self.move(x, y)
 
@@ -392,21 +439,24 @@ class Toolbar(QWidget):
             for w in widgets:
                 w.blockSignals(False)
         self.refit()
+        if self.isVisible():
+            self.keep_on_screen()
 
     # ------------------------------------------------------------------ posición
 
     def restore_position(self) -> None:
         if str(self.ctrl.settings.value("toolbar/collapsed", "false")).lower() == "true":
             self.set_collapsed(True)
-        self.refit()
         pos = self.ctrl.settings.value("toolbar/pos")
-        if isinstance(pos, QPoint):
-            for s in QGuiApplication.screens():
-                if s.availableGeometry().adjusted(-20, -20, -40, -40).contains(pos):
-                    self.move(pos)
-                    return
+        if isinstance(pos, QPoint) and any(
+                s.availableGeometry().adjusted(-20, -20, -40, -40).contains(pos) for s in QGuiApplication.screens()):
+            self.move(pos)
+            self.update_orientation()
+            return
         avail = QGuiApplication.primaryScreen().availableGeometry()
-        self.move(avail.left() + 16, avail.top() + max(16, (avail.height() - self.sizeHint().height()) // 2))
+        self.move(avail.left() + 16, avail.top() + 16)
+        self.update_orientation()
+        self.move(avail.left() + 16, avail.top() + max(16, (avail.height() - self.height()) // 2))
 
     def save_position(self) -> None:
         self.ctrl.settings.setValue("toolbar/pos", self.pos())

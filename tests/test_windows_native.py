@@ -77,7 +77,8 @@ def test_native_toolbar_collapse_resizes_the_real_window(ctrl, qapp):
         _settle(qapp, 200)
         cx, cy, cw, ch = _rect(hwnd)
         assert ch < h / 4, (h, ch)  # la ventana nativa se encoge de verdad
-        assert (cx, cy, cw) == (x, y, w)
+        assert (cx, cy) == (x, y)
+        assert cw == w or tb.horizontal
         tb.sizeHint()
         tb.toggle_collapsed()
         _settle(qapp, 200)
