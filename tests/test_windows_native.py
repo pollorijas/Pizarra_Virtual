@@ -346,7 +346,7 @@ def test_native_spotlight_on_real_desktop(ctrl, qapp):
     _settle(qapp, 300)
     shot = _grab("foco.png")
     ctrl.toggle_spotlight()
-    far = (round(400 * dpr), round((300 + ctrl.spotlight_radius + 60) * dpr))
+    far = (round(max(5, 400 - ctrl.spotlight_radius - 50) * dpr), round(300 * dpr))  # a un lado, dentro de la pantalla
     near = (round(400 * dpr), round(300 * dpr))
     lum = lambda px: sum(px[:3]) / 3  # noqa: E731
     assert lum(shot.getpixel(far)) < lum(before.getpixel(far)) * 0.5 + 1  # fuera del foco: oscuro
