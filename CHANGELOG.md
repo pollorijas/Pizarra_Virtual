@@ -51,6 +51,18 @@ detiene si falta.
 - El temporizador pasa a la sección «Presentación» de la barra.
 - Las flechas ← → también mueven la cortina cuando se descubre desde un lado.
 
+### Corregido
+- **Ratón simulado al usar el dedo**: al levantar el dedo, Windows enviaba además un clic de ratón
+  «simulado» que dejaba un punto suelto con la herramienta activa (por ejemplo, después de borrar
+  con la palma). Ahora ese clic se ignora.
+- **Borrar con la palma en Windows**: Qt no entrega en Windows el tamaño del contacto de los toques.
+  El programa lo lee directamente del sistema; si Windows lo informa un instante después de empezar,
+  el trazo se convierte en goma desde el inicio.
+- **Gesto de dos dedos con la goma**: si el primer dedo llegaba a borrar algo antes de apoyar el
+  segundo, eso quedaba borrado aunque el gesto era «deshacer». Ahora se descarta.
+- **Barra en pantallas bajas**: con los botones nuevos, la barra en dos columnas no cabía por pocos
+  píxeles en una pantalla de 1366×768 al 150 %; se compactó el espacio entre secciones.
+
 ## [1.4.0] - 2026-11-19
 
 ### Añadido
