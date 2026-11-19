@@ -145,13 +145,18 @@ def venn(b: _Builder, sets: int) -> None:
 
 def t_chart(b: _Builder) -> None:
     a = b.area
-    top = a.top() + a.height() * 0.06
-    head = top + b.text_size * 2.2
-    b.text(a.center().x(), top + b.text_size * 0.2, "Título", size=b.text_size * 1.2, bold=True)
+    # Posiciones a partir de la altura real del texto (cambia según la fuente: Segoe UI es más alta)
+    title = b.text(a.center().x(), 0, "Título", size=b.text_size * 1.2, bold=True)
+    title.y = a.top() + a.height() * 0.04
+    labels = []
+    for fx, label in ((0.275, "Ventajas"), (0.725, "Desventajas")):
+        labels.append(b.text(a.left() + a.width() * fx, 0, label, bold=True, max_width=a.width() * 0.42))
+    header_top = render.text_box(title).bottom() + b.text_size * 0.35
+    for item in labels:
+        item.y = header_top
+    head = max(render.text_box(i).bottom() for i in labels) + b.text_size * 0.3
     b.shape(Tool.LINE, a.left() + a.width() * 0.05, head, a.right() - a.width() * 0.05, head, size=b.line * 1.3)
     b.shape(Tool.LINE, a.center().x(), head, a.center().x(), a.bottom() - a.height() * 0.04, size=b.line * 1.3)
-    for fx, label in ((0.275, "Ventajas"), (0.725, "Desventajas")):
-        b.text(a.left() + a.width() * fx, head - b.text_size * 0.75, label, bold=True, max_width=a.width() * 0.42)
 
 
 def kwl_chart(b: _Builder) -> None:

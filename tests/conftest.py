@@ -4,6 +4,10 @@ import sys
 import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+if sys.platform == "win32" and os.environ["QT_QPA_PLATFORM"].startswith("offscreen"):
+    # Sin esto, Qt «offscreen» en Windows no encuentra ninguna fuente y el texto no se dibuja
+    # (igual que en tools/build_manual.py): las pruebas usan las fuentes reales de Windows.
+    os.environ.setdefault("QT_QPA_FONTDIR", os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts"))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
