@@ -15,6 +15,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 def qapp():
     from PySide6.QtWidgets import QApplication
 
+    if sys.platform == "win32" and os.environ.get("QT_QPA_PLATFORM") == "windows":
+        # Pantalla táctil virtual (la de los toques inyectados en las pruebas nativas): debe existir
+        # antes de crear la aplicación para que Qt la detecte y entregue eventos táctiles.
+        import ctypes
+
+        ctypes.windll.user32.InitializeTouchInjection(10, 0x3)
+
     app = QApplication.instance() or QApplication([])
     app.setQuitOnLastWindowClosed(False)
     yield app

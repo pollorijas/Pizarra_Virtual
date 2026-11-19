@@ -172,6 +172,7 @@ class Overlay(QWidget):
         self._tablet_active = False
         self._touch_active = False  # gesto táctil en curso (el ratón simulado se ignora)
         self._touch: dict | None = None
+        self.touch_events = 0  # eventos táctiles recibidos (diagnóstico)
         self._last_pos = QPointF()
         self._last_t = 0
         # Estado de la pluma
@@ -1635,6 +1636,7 @@ class Overlay(QWidget):
         self.update()
 
     def _touch_event(self, ev) -> None:
+        self.touch_events += 1
         t = ev.type()
         now = ev.timestamp()
         g = self._touch
