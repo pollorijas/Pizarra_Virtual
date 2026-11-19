@@ -1,6 +1,7 @@
 """Páginas de la pizarra, guardado/apertura de sesiones (.pizarra) y exportación a PDF."""
 from __future__ import annotations
 
+import base64
 import gzip
 import json
 import math
@@ -12,7 +13,8 @@ from PySide6.QtGui import QColor, QFont, QImage, QPageLayout, QPageSize, QPainte
 
 from . import __version__, render
 from .items import (
-    ClearItem, GroupItem, ShapeItem, StampItem, StrokeItem, TextEditItem, TextItem, resolve_items,
+    ClearItem, DeleteItem, DuplicateItem, GroupItem, ImageItem, ShapeItem, StampItem, StrokeItem, TextEditItem,
+    TextItem, TransformItem, resolve_items,
 )
 from .tools import BACKGROUNDS, PATTERNS, BrushType, Tool
 
@@ -41,6 +43,14 @@ class Page:
 
 
 def item_to_dict(item) -> dict:
+    d = _item_to_dict(item)
+    uid = getattr(item, "uid", None)
+    if uid and d.get("type") not in ("text_edit",):
+        d["uid"] = uid  # lo usan las ediciones posteriores (mover, eliminar, editar texto…)
+    return d
+
+
+def _item_to_dict(item) -> dict:
     if isinstance(item, StrokeItem):
         return {"type": "stroke", "tool": item.tool.value, "rgba": list(item.rgba), "size": item.size,
                 "opacity": item.opacity, "brush": item.brush.value, "seed": item.seed,
@@ -51,20 +61,39 @@ def item_to_dict(item) -> dict:
                 "filled": item.filled}
     if isinstance(item, TextItem):
         return {"type": "text", "rgba": list(item.rgba), "size": item.size, "opacity": item.opacity,
-                "x": item.x, "y": item.y, "text": item.text, "bold": item.bold, "uid": item.uid}
+                "x": item.x, "y": item.y, "text": item.text, "bold": item.bold}
     if isinstance(item, StampItem):
         return {"type": "stamp", "kind": item.kind, "rgba": list(item.rgba), "size": item.size,
                 "opacity": item.opacity, "x": item.x, "y": item.y, "label": item.label}
+    if isinstance(item, ImageItem):
+        return {"type": "image", "png": base64.b64encode(item.data).decode("ascii"), "x": item.x, "y": item.y,
+                "w": item.w, "h": item.h, "opacity": item.opacity}
     if isinstance(item, GroupItem):
         return {"type": "group", "items": [item_to_dict(i) for i in item.items]}
     if isinstance(item, TextEditItem):
         return {"type": "text_edit", "uid": item.uid, "text": item_to_dict(item.text)}
+    if isinstance(item, TransformItem):
+        return {"type": "transform", "uids": list(item.uids), "dx": item.dx, "dy": item.dy,
+                "scale": item.scale, "ox": item.ox, "oy": item.oy}
+    if isinstance(item, DeleteItem):
+        return {"type": "delete", "uids": list(item.uids)}
+    if isinstance(item, DuplicateItem):
+        return {"type": "duplicate", "uids": list(item.uids), "new_uids": list(item.new_uids),
+                "dx": item.dx, "dy": item.dy}
     if isinstance(item, ClearItem):
         return {"type": "clear"}
     raise TypeError(f"Elemento desconocido: {item!r}")
 
 
 def item_from_dict(d: dict):
+    item = _item_from_dict(d)
+    # Las sesiones anteriores a la 1.4 no guardan uid en trazos, figuras ni sellos: se genera uno.
+    if d.get("uid") and hasattr(item, "uid") and d.get("type") != "text_edit":
+        item.uid = str(d["uid"])
+    return item
+
+
+def _item_from_dict(d: dict):
     t = d.get("type")
     if t == "stroke":
         return StrokeItem(Tool(d["tool"]), tuple(d["rgba"]), float(d["size"]), float(d["opacity"]),
@@ -74,20 +103,28 @@ def item_from_dict(d: dict):
         return ShapeItem(Tool(d["tool"]), tuple(d["rgba"]), float(d["size"]), float(d["opacity"]),
                          float(d["x1"]), float(d["y1"]), float(d["x2"]), float(d["y2"]), bool(d.get("filled")))
     if t == "text":
-        item = TextItem(tuple(d["rgba"]), float(d["size"]), float(d["opacity"]), float(d["x"]), float(d["y"]),
+        return TextItem(tuple(d["rgba"]), float(d["size"]), float(d["opacity"]), float(d["x"]), float(d["y"]),
                         str(d.get("text", "")), bool(d.get("bold")))
-        if d.get("uid"):  # las sesiones de la 1.2.0/1.2.1 no lo tienen: se genera uno nuevo
-            item.uid = str(d["uid"])
-        return item
     if t == "stamp":
         return StampItem(str(d["kind"]), tuple(d["rgba"]), float(d["size"]), float(d["opacity"]),
                          float(d["x"]), float(d["y"]), str(d.get("label", "")))
+    if t == "image":
+        return ImageItem(base64.b64decode(d["png"]), float(d["x"]), float(d["y"]), float(d["w"]), float(d["h"]),
+                         float(d.get("opacity", 1.0)))
     if t == "group":
         return GroupItem([item_from_dict(i) for i in d.get("items", [])])
     if t == "text_edit":
         text = item_from_dict(d["text"])
         text.uid = str(d["uid"])
         return TextEditItem(str(d["uid"]), text)
+    if t == "transform":
+        return TransformItem([str(u) for u in d["uids"]], float(d.get("dx", 0)), float(d.get("dy", 0)),
+                             float(d.get("scale", 1)), float(d.get("ox", 0)), float(d.get("oy", 0)))
+    if t == "delete":
+        return DeleteItem([str(u) for u in d["uids"]])
+    if t == "duplicate":
+        return DuplicateItem([str(u) for u in d["uids"]], [str(u) for u in d["new_uids"]],
+                             float(d.get("dx", 24)), float(d.get("dy", 24)))
     if t == "clear":
         return ClearItem()
     raise ValueError(f"Tipo de elemento desconocido: {t!r}")

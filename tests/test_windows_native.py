@@ -403,7 +403,9 @@ def test_native_mouse_mode_with_cartesian_sheet_can_return(ctrl, qapp):
     box = (x0, y0, x0 + 60, y0 + 60)  # zona sin barra ni trazos (incluye líneas de la cuadrícula)
 
     def region(name):
-        return list(_grab(name).crop(box).convert("RGB").getdata())
+        img = _grab(name).crop(box).convert("RGB")
+        raw = img.tobytes()  # (getdata() desaparece en Pillow 14)
+        return [tuple(raw[i:i + 3]) for i in range(0, len(raw), 3)]
 
     sheet = region("cartesiano_dibujando.png")
     assert sum(min(px) > 180 for px in sheet) > 0.95 * len(sheet)  # hoja clara (blanco y cuadrícula)
@@ -531,3 +533,78 @@ def test_native_erased_text_stamps_and_templates_with_real_input(ctrl, qapp):
     texts = [i.text.lower() for i in ctrl.items_for(ov.key) if isinstance(i, TextItem)]
     assert "introducción uno" in texts
     _grab("plantilla_editada.png")
+
+
+def test_native_v14_recognition_select_paste_and_timer(ctrl, qapp):
+    """Ratón y teclado reales: formas perfectas, seleccionar-mover-eliminar, Ctrl+V de una imagen
+    y temporizador (encima de la pizarra y con su botón de pausa)."""
+    import ctypes
+    import math
+    from ctypes import wintypes
+
+    from PySide6.QtGui import QColor, QGuiApplication, QImage
+
+    from pizarra_virtual.items import DeleteItem, ImageItem, ShapeItem, TransformItem
+    from pizarra_virtual.tools import Tool
+
+    _, _, user32 = _win32()
+    user32.WindowFromPoint.argtypes = [wintypes.POINT]
+    user32.WindowFromPoint.restype = wintypes.HWND
+    user32.GetAncestor.argtypes = [wintypes.HWND, ctypes.c_uint]
+    user32.GetAncestor.restype = wintypes.HWND
+    ov = _overlay(ctrl)
+    dpr = ov.devicePixelRatioF()
+    cx = max(520, ctrl.toolbar.geometry().right() + 200)
+
+    def key(vk, ctrl_down=False):
+        if ctrl_down:
+            user32.keybd_event(0x11, 0, 0, 0)
+        user32.keybd_event(vk, 0, 0, 0)
+        user32.keybd_event(vk, 0, 2, 0)
+        if ctrl_down:
+            user32.keybd_event(0x11, 0, 2, 0)
+        _settle(qapp, 250)
+
+    # 1) Formas perfectas: un círculo a mano alzada se vuelve un círculo exacto
+    ctrl.set_tool(Tool.PEN)
+    ctrl.set_recognize_shapes(True)
+    _settle(qapp)
+    pts = [(cx + 90 * math.cos(a / 20), 300 + 90 * math.sin(a / 20)) for a in range(0, 132)]
+    _real_mouse(qapp, pts, dpr)
+    circle = ctrl.history[-1][1]
+    assert isinstance(circle, ShapeItem) and circle.tool == Tool.ELLIPSE
+
+    # 2) Seleccionar con un clic sobre el borde y mover 120 px; Supr lo elimina
+    ctrl.set_tool(Tool.SELECT)
+    _settle(qapp)
+    _real_mouse(qapp, [(cx + 90, 300)] + [(cx + 90 + k * 10, 300) for k in range(1, 13)], dpr)
+    assert isinstance(ctrl.history[-1][1], TransformItem) and ov.selection == [circle.uid]
+    (moved,) = [i for i in ctrl.items_for(ov.key) if getattr(i, "uid", None) == circle.uid]
+    assert abs(moved.x1 - (circle.x1 + 120)) <= 2
+    key(0x2E)  # Supr
+    assert isinstance(ctrl.history[-1][1], DeleteItem) and not ctrl.items_for(ov.key)
+
+    # 3) Ctrl+V con una imagen en el portapapeles de Windows
+    img = QImage(160, 100, QImage.Format.Format_RGB32)
+    img.fill(QColor(30, 136, 229))
+    QGuiApplication.clipboard().setImage(img)
+    _settle(qapp, 200)
+    user32.SetCursorPos(round(cx * dpr), round(300 * dpr))
+    ctrl._raise_toolbar(activate=True)
+    _settle(qapp, 300)
+    key(0x56, ctrl_down=True)  # Ctrl+V
+    assert isinstance(ctrl.history[-1][1], ImageItem) and ctrl.tool == Tool.SELECT
+    _grab("imagen_pegada.png")
+
+    # 4) Temporizador: encima de la pizarra y el botón de pausa responde a un clic real
+    ctrl.start_timer(120)
+    _settle(qapp, 400)
+    w = ctrl.timer_window
+    b = w.pause_btn
+    c = b.mapToGlobal(b.rect().center())
+    hwnd = user32.WindowFromPoint(wintypes.POINT(round(c.x() * dpr), round(c.y() * dpr)))
+    assert int(user32.GetAncestor(hwnd, 2) or 0) == int(w.winId())
+    assert w.running
+    _real_mouse(qapp, [(c.x(), c.y()), (c.x(), c.y())], dpr)
+    assert not w.running  # en pausa
+    _grab("temporizador.png")

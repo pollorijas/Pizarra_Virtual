@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QPoint, QSize, Qt, QTimer
-from PySide6.QtGui import QColor, QGuiApplication, QKeySequence, QShortcut
+from PySide6.QtGui import QColor, QFont, QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QBoxLayout, QButtonGroup, QColorDialog, QComboBox, QFrame, QGridLayout, QHBoxLayout, QLabel, QLayout, QMenu,
     QPushButton, QSizePolicy, QSlider, QToolButton, QVBoxLayout, QWidget,
@@ -13,8 +13,8 @@ from PySide6.QtWidgets import (
 from . import icons
 from . import templates
 from .tools import (
-    BACKGROUNDS, BRUSH_LABELS, EXTRA_SHAPES, FILLABLE_SHAPES, MAIN_TOOLS, PALETTE, PATTERNS, STAMPS, TOOL_SPECS,
-    BrushType, Tool,
+    BACKGROUNDS, BRUSH_LABELS, EXTRA_SHAPES, FILLABLE_SHAPES, MAIN_TOOLS, PALETTE, PATTERNS, RECOGNIZABLE_TOOLS,
+    STAMPS, TOOL_SPECS, BrushType, Tool,
 )
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -145,6 +145,19 @@ class Toolbar(QWidget):
             act.triggered.connect(lambda _c=False, k=kind: self.ctrl.set_stamp_kind(k))
         return menu
 
+    def build_timer_menu(self, menu: QMenu | None = None) -> QMenu:
+        menu = menu if menu is not None else QMenu(self)
+        menu.clear()
+        for minutes in (1, 2, 3, 5, 10, 15, 20, 30):
+            act = menu.addAction(f"{minutes} minuto{'s' if minutes > 1 else ''}")
+            act.triggered.connect(lambda _c=False, m=minutes: self.ctrl.start_timer(m * 60))
+        menu.addAction("Otro tiempo…").triggered.connect(lambda: self.ctrl.ask_timer())
+        menu.addSeparator()
+        menu.addAction("Cronómetro (cuenta hacia arriba)").triggered.connect(lambda: self.ctrl.start_stopwatch())
+        if self.ctrl.timer_visible:
+            menu.addAction("Cerrar el temporizador").triggered.connect(lambda: self.ctrl.hide_timer())
+        return menu
+
     def build_templates_menu(self, menu: QMenu | None = None) -> QMenu:
         menu = menu if menu is not None else QMenu(self)
         menu.clear()
@@ -238,7 +251,21 @@ class Toolbar(QWidget):
         self.templates_btn = self._menu_button("templates", "Plantillas: mapa conceptual, línea de tiempo,\n"
                                                             "diagramas de Venn, tablas, esquema de redacción…",
                                                self.build_templates_menu, checkable=False)
-        for k, b in enumerate((self.more_shapes_btn, self.stamp_btn, self.templates_btn)):
+        # Seleccionar y mover, temporizador y pegar
+        spec = TOOL_SPECS[Tool.SELECT]
+        self.select_btn = self._tool_button(spec.icon, "Seleccionar y mover  [A]\nClic en algo o arrastra un lazo; "
+                                                       "arrastra para mover, la esquina para cambiar el tamaño.\n"
+                                                       "Supr: eliminar · Ctrl+D: duplicar · Ctrl+A: todo",
+                                            checkable=True)
+        self.select_btn.clicked.connect(lambda: self.ctrl.set_tool(Tool.SELECT))
+        self.tool_group.addButton(self.select_btn)
+        self.tool_buttons[Tool.SELECT] = self.select_btn
+        self.timer_btn = self._menu_button("timer", "Temporizador en pantalla (cuenta regresiva o cronómetro)",
+                                           self.build_timer_menu, checkable=False)
+        self.paste_btn = self._tool_button("paste", "Pegar una imagen o un texto copiado  [Ctrl+V]")
+        self.paste_btn.clicked.connect(lambda: self.ctrl.paste())
+        for k, b in enumerate((self.more_shapes_btn, self.stamp_btn, self.templates_btn,
+                               self.select_btn, self.timer_btn, self.paste_btn)):
             grid.addWidget(b, (n + k) // 3, (n + k) % 3)
         c1.addLayout(grid)
 
@@ -262,6 +289,22 @@ class Toolbar(QWidget):
         self.fill_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.fill_btn.clicked.connect(lambda c: self.ctrl.set_fill(c))
         c1.addWidget(self.fill_btn)
+
+        # Formas perfectas (reconocimiento de formas): opción que se activa a voluntad
+        self.recognize_btn = QToolButton()
+        self.recognize_btn.setText("Formas perfectas")
+        self.recognize_btn.setCheckable(True)
+        self.recognize_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.recognize_btn.setToolTip("Formas perfectas [G]: al soltar el trazo, las líneas, círculos,\n"
+                                      "rectángulos y polígonos dibujados a mano se vuelven figuras exactas.\n"
+                                      "Desactívalo para dibujar libremente.")
+        self.recognize_btn.setFixedHeight(24)
+        small = QFont(self.recognize_btn.font())
+        small.setPixelSize(10)
+        self.recognize_btn.setFont(small)
+        self.recognize_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.recognize_btn.clicked.connect(lambda c: self.ctrl.set_recognize_shapes(c))
+        c1.addWidget(self.recognize_btn)
 
         # Negrita (texto)
         self.bold_btn = QToolButton()
@@ -453,7 +496,11 @@ class Toolbar(QWidget):
         add("Ctrl+Z", c.undo)
         add("Ctrl+Y", c.redo)
         add("Ctrl+Shift+Z", c.redo)
-        add("Del", c.clear_all)
+        add("Del", c.delete_key)
+        add("Ctrl+D", c.duplicate_selection)
+        add("Ctrl+A", c.select_all)
+        add("Ctrl+V", c.paste)
+        add("G", c.toggle_recognize_shapes)
         add("Esc", c.escape)
         add("Z", c.toggle_zoom)
         add("Ctrl+Alt+Z", c.toggle_zoom)
@@ -594,6 +641,8 @@ class Toolbar(QWidget):
 
             self.fill_btn.setVisible(c.tool in FILLABLE_SHAPES)
             self.fill_btn.setChecked(c.fill_shapes)
+            self.recognize_btn.setVisible(c.tool in RECOGNIZABLE_TOOLS)
+            self.recognize_btn.setChecked(c.recognize_shapes)
             self.bold_btn.setVisible(c.tool == Tool.TEXT)
             self.bold_btn.setChecked(c.text_bold)
 
@@ -607,6 +656,9 @@ class Toolbar(QWidget):
             what = {Tool.TEXT: "Letra", Tool.LASER: "Tamaño", Tool.STAMP: "Tamaño"}.get(c.tool, "Grosor")
             self.size_label.setText(f"{what}: {int(c.size_for(c.tool))} px")
             self.size_label.setToolTip(spec.label)
+            sized = c.tool != Tool.SELECT  # seleccionar no tiene grosor
+            self.size_label.setVisible(sized)
+            self.size_slider.setVisible(sized)
 
             self.opacity_label.setVisible(spec.has_opacity)
             self.opacity_slider.setVisible(spec.has_opacity)

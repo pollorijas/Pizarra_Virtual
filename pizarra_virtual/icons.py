@@ -404,6 +404,59 @@ def _templates(p, c):
     p.drawEllipse(QPointF(19, 19.5), 2.2, 2.2)
 
 
+def _select(p, c):
+    """Seleccionar: recuadro discontinuo y flecha del ratón."""
+    pen = _pen(c, 1.4)
+    pen.setStyle(Qt.PenStyle.DashLine)
+    p.setPen(pen)
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawRect(QRectF(2.5, 2.5, 14, 12))
+    p.setPen(_pen(c, 1.2))
+    p.setBrush(c)
+    p.drawPolygon(_poly((11, 9), (11, 22), (14.2, 18.8), (16.6, 23.4), (18.6, 22.4), (16.3, 17.9), (20.5, 17.6)))
+
+
+def _timer(p, c):
+    """Temporizador: cronómetro con aguja."""
+    p.setPen(_pen(c, 1.8))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawEllipse(QPointF(12, 13.5), 8, 8)
+    p.drawLine(QPointF(10, 2.5), QPointF(14, 2.5))
+    p.drawLine(QPointF(12, 2.5), QPointF(12, 5.5))
+    p.drawLine(QPointF(18.5, 6), QPointF(20, 4.5))
+    p.drawLine(QPointF(12, 13.5), QPointF(15.5, 9.5))
+    p.setBrush(c)
+    p.drawEllipse(QPointF(12, 13.5), 1.3, 1.3)
+
+
+def _paste(p, c):
+    """Pegar: portapapeles con una imagen."""
+    p.setPen(_pen(c, 1.6))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawRoundedRect(QRectF(4, 4, 16, 18), 2, 2)
+    p.setBrush(c)
+    p.drawRoundedRect(QRectF(8.5, 2, 7, 4), 1.2, 1.2)
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawRect(QRectF(7.5, 9.5, 9, 9))
+    p.setPen(_pen(c, 1.3))
+    p.drawPolyline(_poly((8, 18), (11, 14.5), (13, 16.5), (14.5, 15), (16.5, 18)))
+
+
+def _shapes_magic(p, c):
+    """Formas perfectas: trazo ondulado que se convierte en círculo."""
+    p.setPen(_pen(c, 1.6))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawEllipse(QPointF(15, 13), 6.5, 6.5)
+    path = QPainterPath()
+    path.moveTo(2, 8)
+    path.quadTo(4, 4, 6, 8)
+    path.quadTo(8, 12, 10, 8)
+    p.drawPath(path)
+    p.drawLine(QPointF(5.5, 14), QPointF(8, 14))
+    p.drawLine(QPointF(7, 12.5), QPointF(8.3, 14))
+    p.drawLine(QPointF(7, 15.5), QPointF(8.3, 14))
+
+
 _ICONS = {
     "brush": _brush, "pencil": _pencil, "pen": _pen_nib, "highlighter": _highlighter,
     "eraser": _eraser, "rect": _rect, "ellipse": _ellipse, "triangle": _triangle,
@@ -413,6 +466,7 @@ _ICONS = {
     "curtain": _curtain, "highlight": _highlight, "page_prev": _page_prev, "page_next": _page_next,
     "page_add": _page_add, "file": _file, "save": _save, "pdf": _pdf, "bold": _bold, "chevron_up": _chevron_up, "chevron_down": _chevron_down,
     "shapes_more": _shapes_more, "stamp": _stamp, "templates": _templates,
+    "select": _select, "timer": _timer, "paste": _paste, "shapes_magic": _shapes_magic,
 }
 for _name in ("pentagon", "hexagon", "octagon", "diamond", "star", "rounded_rect", "axes", "double_arrow",
               "curved_arrow", "brace"):

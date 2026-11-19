@@ -24,9 +24,9 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -68,7 +68,7 @@ jobs:
 
       - name: Subir capturas de las pruebas
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: capturas-de-pruebas
           path: test-screens/
@@ -103,14 +103,14 @@ jobs:
           "ZIP=$zip" >> $env:GITHUB_ENV
 
       - name: Subir artefacto
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: PizarraVirtual
           path: ${{ env.ZIP }}
 
       - name: Publicar release (etiqueta v* o versión indicada al lanzarlo a mano)
         if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.version != '')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           # Si la etiqueta no existe, se crea sobre el commit compilado.
           tag_name: ${{ inputs.version || github.ref_name }}

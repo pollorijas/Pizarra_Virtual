@@ -96,6 +96,30 @@ def render_all_tools():
         p.end()
         results[f"template:{key}"] = painted(img)
 
+    # Imagen pegada (PNG dentro de la sesión) y reconocimiento de formas
+    import math
+
+    from PySide6.QtCore import QBuffer, QIODevice
+    from PySide6.QtGui import QColor
+
+    from .items import ImageItem
+    from .shape_recognition import recognize
+
+    src = QImage(40, 30, QImage.Format.Format_RGB32)
+    src.fill(QColor(30, 136, 229))
+    buf = QBuffer()
+    buf.open(QIODevice.OpenModeFlag.WriteOnly)
+    src.save(buf, "PNG")
+    img = blank()
+    p = QPainter(img)
+    render.draw_item(p, ImageItem(bytes(buf.data()), 20, 20, 120, 90))
+    p.end()
+    results["image"] = painted(img)
+    circle = StrokeItem(Tool.PEN, (0, 0, 0, 255), 4, points=[(120 + 60 * math.cos(k / 10), 80 + 60 * math.sin(k / 10), 4)
+                                                             for k in range(66)])
+    shape = recognize(circle)
+    results["recognize:circle"] = int(shape is not None and shape.tool == Tool.ELLIPSE)
+
     # La goma debe borrar lo pintado
     img = blank()
     img.fill(Qt.GlobalColor.black)

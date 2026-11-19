@@ -31,6 +31,8 @@ class Tool(str, Enum):
     BRACE = "brace"
     # Sellos
     STAMP = "stamp"
+    # Seleccionar y mover
+    SELECT = "select"
 
 
 FREEHAND_TOOLS = (Tool.BRUSH, Tool.PENCIL, Tool.PEN, Tool.HIGHLIGHTER, Tool.ERASER)
@@ -98,7 +100,10 @@ TOOL_SPECS: dict[Tool, ToolSpec] = {
     Tool.CURVED_ARROW: ToolSpec("Flecha curva", "U", "curved_arrow", 4, 1, 40, 100),
     Tool.BRACE: ToolSpec("Llave", "K", "brace", 4, 1, 40, 100),
     Tool.STAMP: ToolSpec("Sellos", "S", "stamp", 56, 20, 200, 100),
+    Tool.SELECT: ToolSpec("Seleccionar y mover", "A", "select", 1, 1, 1, 100, has_opacity=False),
 }
+# Trazos a mano alzada que pueden convertirse en figuras perfectas («Reconocer formas»)
+RECOGNIZABLE_TOOLS = (Tool.BRUSH, Tool.PENCIL, Tool.PEN)
 
 # Sellos: clave -> etiqueta
 STAMPS = {

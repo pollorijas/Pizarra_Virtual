@@ -9,6 +9,7 @@ dibujo en vivo (incremental) y para volver a renderizar el historial
 """
 from __future__ import annotations
 
+import hashlib
 import math
 import random
 from dataclasses import replace
@@ -18,7 +19,7 @@ from PySide6.QtGui import (
     QBrush, QColor, QFont, QFontMetricsF, QImage, QPainter, QPainterPath, QPen, QPolygonF, QRadialGradient,
 )
 
-from .items import ClearItem, GroupItem, ShapeItem, StampItem, StrokeItem, TextItem
+from .items import ClearItem, GroupItem, ImageItem, ShapeItem, StampItem, StrokeItem, TextItem
 from .tools import FILLABLE_SHAPES, LINEAR_SHAPES, POLYGON_SIDES, BrushType, Tool
 
 NIB_ANGLE = math.radians(40)      # ángulo de la punta caligráfica
@@ -749,12 +750,36 @@ def apply_erasers(p: QPainter, erasers) -> None:
     p.restore()
 
 
-def text_ink_near(item: TextItem, erasers, pos: QPointF, radius: float) -> bool:
-    """¿Queda tinta visible de este texto (tras las gomas) a menos de ``radius`` del punto?
+def text_ink_near(item, erasers, pos: QPointF, radius: float) -> bool:
+    """¿Queda tinta visible de este elemento (tras las gomas) a menos de ``radius`` del punto?
 
     Así un texto borrado con la goma deja de poder abrirse para editarlo, y en uno borrado a
-    medias solo cuenta la parte que todavía se ve.
+    medias solo cuenta la parte que todavía se ve. Sirve para cualquier elemento (selección).
     """
+    return ink_near(item, erasers, pos, radius)
+
+
+def item_visible(item, erasers) -> bool:
+    """¿Queda algo visible del elemento tras las gomas? (a resolución reducida, es rápido)."""
+    if erasers is None:
+        return False
+    rect = item_rect(item)
+    if rect.isEmpty():
+        return False
+    k = min(1.0, 160.0 / max(rect.width(), rect.height()))
+    w, h = max(1, math.ceil(rect.width() * k)), max(1, math.ceil(rect.height() * k))
+    img = QImage(w, h, QImage.Format.Format_ARGB32_Premultiplied)
+    img.fill(Qt.GlobalColor.transparent)
+    p = QPainter(img)
+    p.scale(k, k)
+    p.translate(-rect.left(), -rect.top())
+    draw_item(p, replace(item, opacity=1.0))
+    apply_erasers(p, list(getattr(item, "mask", [])) + list(erasers))
+    p.end()
+    return any(img.pixelColor(x, y).alpha() > 30 for y in range(h) for x in range(w))
+
+
+def ink_near(item, erasers, pos: QPointF, radius: float) -> bool:
     if erasers is None:
         return False
     side = int(math.ceil(2 * radius)) + 2
@@ -763,8 +788,8 @@ def text_ink_near(item: TextItem, erasers, pos: QPointF, radius: float) -> bool:
     p = QPainter(img)
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
     p.translate(side / 2 - pos.x(), side / 2 - pos.y())
-    draw_text(p, replace(item, opacity=1.0))
-    apply_erasers(p, erasers)
+    draw_item(p, replace(item, opacity=1.0))
+    apply_erasers(p, list(getattr(item, "mask", [])) + list(erasers))
     p.end()
     c = side / 2
     r2 = radius * radius
@@ -982,6 +1007,33 @@ def draw_stamp(p: QPainter, item: StampItem) -> None:
     p.restore()
 
 
+# --------------------------------------------------------------------------- imágenes
+
+_IMAGE_CACHE: dict[bytes, QImage] = {}
+
+
+def image_of(item: ImageItem) -> QImage:
+    """Imagen decodificada (se guarda en caché: la misma imagen puede dibujarse muchas veces)."""
+    key = hashlib.sha1(item.data).digest()
+    img = _IMAGE_CACHE.get(key)
+    if img is None:
+        img = QImage.fromData(item.data)
+        if len(_IMAGE_CACHE) > 64:
+            _IMAGE_CACHE.clear()
+        _IMAGE_CACHE[key] = img
+    return img
+
+
+def draw_image(p: QPainter, item: ImageItem) -> None:
+    img = image_of(item)
+    if img.isNull():
+        return
+    p.save()
+    p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+    p.drawImage(QRectF(item.x, item.y, item.w, item.h).normalized(), img)
+    p.restore()
+
+
 def draw_item(p: QPainter, item) -> None:
     if isinstance(item, StrokeItem):
         draw_stroke(p, item)
@@ -991,6 +1043,8 @@ def draw_item(p: QPainter, item) -> None:
         draw_text(p, item)
     elif isinstance(item, StampItem):
         draw_stamp(p, item)
+    elif isinstance(item, ImageItem):
+        draw_image(p, item)
     elif isinstance(item, GroupItem):
         for sub in item.items:
             draw_item(p, sub)
@@ -1006,6 +1060,8 @@ def item_rect(item) -> QRectF:
     if isinstance(item, StampItem):
         r = item.size * 0.62 + 4
         return QRectF(item.x - r, item.y - r, 2 * r, 2 * r)
+    if isinstance(item, ImageItem):
+        return QRectF(item.x, item.y, item.w, item.h).normalized().adjusted(-2, -2, 2, 2)
     if isinstance(item, GroupItem):
         rect = QRectF()
         for sub in item.items:
@@ -1043,6 +1099,7 @@ def apply_item_to_canvas(canvas: QImage, layer: QImage, item) -> None:
     p = QPainter(layer)
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
     draw_item(p, item)
+    apply_erasers(p, getattr(item, "mask", None))  # lo borrado antes de moverlo sigue borrado
     p.end()
     p = QPainter(canvas)
     p.setClipRect(rect)

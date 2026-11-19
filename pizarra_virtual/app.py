@@ -6,15 +6,21 @@ import json
 import logging
 import os
 import sys
+import uuid
 
-from PySide6.QtCore import QEvent, QObject, QPointF, QRectF, QSettings, QStandardPaths, Qt, QTimer, Signal
-from PySide6.QtGui import QAction, QColor, QCursor, QGuiApplication
-from PySide6.QtWidgets import QApplication, QFileDialog, QMenu, QMessageBox, QSystemTrayIcon
+from PySide6.QtCore import (
+    QBuffer, QEvent, QIODevice, QObject, QPointF, QRectF, QSettings, QStandardPaths, Qt, QTimer, Signal,
+)
+from PySide6.QtGui import QAction, QColor, QCursor, QGuiApplication, QImage
+from PySide6.QtWidgets import QApplication, QFileDialog, QInputDialog, QMenu, QMessageBox, QSystemTrayIcon
 
 from . import __version__, capture, icons, session, winutil
 from .hotkeys import MOD_ALT, MOD_CONTROL, MOD_SHIFT, GlobalHotkeys
 from . import templates
-from .items import ClearItem, StampItem, TextEditItem, flatten
+from .items import (
+    ClearItem, DeleteItem, DuplicateItem, ImageItem, StampItem, TextEditItem, TextItem, TransformItem, flatten,
+)
+from .timer import TimerWindow
 from .overlay import Overlay, make_stamp_cursor, make_tool_cursor, now_ms
 from .session import Page
 from .toolbar import Toolbar
@@ -83,6 +89,8 @@ class Controller(QObject):
         self.fill_shapes = False
         self.text_bold = False
         self.stamp_kind = "check"
+        self.recognize_shapes = False  # «Formas perfectas»: opción que se activa a voluntad
+        self.timer_window: TimerWindow | None = None
         self.extra_shape = Tool.HEXAGON  # última figura elegida en «Más figuras»
         self.spotlight_radius = SPOTLIGHT_DEFAULT
         self.spotlight_shape = "circle"  # "circle" o "rect" (franja, p. ej. para leer línea a línea)
@@ -189,6 +197,10 @@ class Controller(QObject):
         for ov in list(self.overlays.values()):
             ov.close()
         self.overlays.clear()
+        if self.timer_window is not None:
+            self.timer_window.close()
+            self.timer_window.deleteLater()
+            self.timer_window = None
         self.toolbar.close()
 
     def _register_hotkeys(self) -> list[str]:
@@ -271,6 +283,47 @@ class Controller(QObject):
             self.stamp_kind = kind
             self.set_tool(Tool.STAMP)
             self._changed(cursor=True)
+
+    # ---- temporizador
+
+    def _timer(self) -> TimerWindow:
+        if self.timer_window is None:
+            self.timer_window = TimerWindow()
+        win = self.timer_window
+        if not win.isVisible():
+            win.place_on(self.current_screen())
+            win.show()
+        win.raise_()
+        return win
+
+    def start_timer(self, seconds: float) -> None:
+        self._timer().start_countdown(seconds)
+
+    def start_stopwatch(self) -> None:
+        self._timer().start_stopwatch()
+
+    def ask_timer(self) -> None:
+        minutes, ok = QInputDialog.getInt(self.toolbar, "Temporizador", "Minutos:", 5, 1, 300, 1)
+        if ok:
+            self.start_timer(minutes * 60)
+
+    def hide_timer(self) -> None:
+        if self.timer_window is not None:
+            self.timer_window.close()
+
+    @property
+    def timer_visible(self) -> bool:
+        return self.timer_window is not None and self.timer_window.isVisible()
+
+    def set_recognize_shapes(self, on: bool) -> None:
+        self.recognize_shapes = bool(on)
+        self._changed()
+
+    def toggle_recognize_shapes(self) -> None:
+        self.set_recognize_shapes(not self.recognize_shapes)
+        self.notify("Formas perfectas " + ("activadas" if self.recognize_shapes else "desactivadas"),
+                    "Las líneas, círculos, rectángulos y polígonos dibujados a mano se convierten en figuras."
+                    if self.recognize_shapes else "Los trazos se quedan tal como los dibujas.")
 
     def cycle_stamp(self) -> None:
         """Tecla S: elige la herramienta Sellos; si ya está elegida, pasa al siguiente sello."""
@@ -460,6 +513,8 @@ class Controller(QObject):
     def _keep_toolbar_on_top(self) -> None:
         if not self._shutting_down and self.toolbar.isVisible():
             self.toolbar.raise_()
+        if not self._shutting_down and self.timer_visible:
+            self.timer_window.raise_()
 
     @property
     def sheet_visible(self) -> bool:
@@ -491,9 +546,12 @@ class Controller(QObject):
         self._changed()
 
     def escape(self) -> None:
-        """Esc: primero sale del zoom; si no hay zoom, pasa a «Ratón libre»."""
+        """Esc: primero sale del zoom o quita la selección; si no, pasa a «Ratón libre»."""
         if self.zoom_active:
             self.exit_zoom()
+        elif self.has_selection:
+            for ov in self.overlays.values():
+                ov.clear_selection()
         else:
             self.set_drawing(False)
 
@@ -636,6 +694,7 @@ class Controller(QObject):
         anchor = QPointF(ov.mapFromGlobal(QCursor.pos()))
         toolbar_visible = self.toolbar.isVisible()
         self.toolbar.hide()
+        self._hide_timer_for_grab()
         ov.hide()
         QTimer.singleShot(CAPTURE_DELAY_MS, lambda: self._do_start_zoom(screen, ov, anchor, toolbar_visible))
 
@@ -655,6 +714,7 @@ class Controller(QObject):
                 if self.visible:
                     o.show()
                     o.apply_input_mode()
+            self._restore_timer_after_grab()
             if toolbar_visible or self.drawing:
                 self._raise_toolbar(activate=self.drawing)
             self._capturing = False
@@ -672,6 +732,8 @@ class Controller(QObject):
         if not self.toolbar.isVisible():
             self.toolbar.show()
         self.toolbar.raise_()
+        if self.timer_visible:
+            self.timer_window.raise_()
         if activate:
             self.toolbar.activateWindow()
 
@@ -705,6 +767,130 @@ class Controller(QObject):
     def _finish_all(self) -> None:
         for ov in self.overlays.values():
             ov.finish_current()
+            ov.clear_selection()
+
+    # ---- selección (herramienta Seleccionar)
+
+    def selection_overlay(self) -> Overlay | None:
+        return next((ov for ov in self.overlays.values() if ov.selection), None)
+
+    def selection_changed(self) -> None:
+        self.state_changed.emit()
+
+    @property
+    def has_selection(self) -> bool:
+        return self.selection_overlay() is not None
+
+    def delete_selection(self) -> bool:
+        ov = self.selection_overlay()
+        if ov is None:
+            return False
+        uids = list(ov.selection)
+        ov.clear_selection()
+        self.push(ov.key, DeleteItem(uids))
+        ov.rebuild()
+        return True
+
+    def duplicate_selection(self) -> bool:
+        ov = self.selection_overlay()
+        if ov is None:
+            return False
+        uids = [i.uid for i in ov.selected_items()]
+        new = [uuid.uuid4().hex for _ in uids]
+        ov.clear_selection()
+        self.push(ov.key, DuplicateItem(uids, new))
+        ov.rebuild()
+        ov.set_selection(new)  # la copia queda seleccionada, lista para moverla
+        return True
+
+    def select_all(self) -> None:
+        if self.tool != Tool.SELECT:
+            self.set_tool(Tool.SELECT)
+        ov = self.overlay_for_screen(self.current_screen()) or next(iter(self.overlays.values()), None)
+        if ov is not None:
+            ov.select_all()
+
+    # ---- pegar (Ctrl+V)
+
+    def paste(self) -> bool:
+        """Pega lo que haya en el portapapeles: una imagen (o un archivo de imagen) o un texto.
+
+        Se coloca centrado en el cursor y queda seleccionado para moverlo o cambiar su tamaño.
+        """
+        self._finish_all()
+        mime = QGuiApplication.clipboard().mimeData()
+        img = QImage()
+        if mime is not None and mime.hasImage():
+            img = QImage(mime.imageData())
+        if img.isNull() and mime is not None and mime.hasUrls():
+            for url in mime.urls():
+                if url.isLocalFile():
+                    candidate = QImage(url.toLocalFile())
+                    if not candidate.isNull():
+                        img = candidate
+                        break
+        if not img.isNull():
+            return self.paste_image(img)
+        text = mime.text().replace("\r\n", "\n").replace("\r", "\n").strip() if mime is not None else ""
+        if text:
+            return self.paste_text(text)
+        self.notify("Nada que pegar", "Copia una imagen o un texto y vuelve a pulsar Ctrl+V.")
+        return False
+
+    def _paste_target(self) -> tuple[Overlay | None, QPointF]:
+        ov = self.overlay_for_screen(self.current_screen()) or next(iter(self.overlays.values()), None)
+        if ov is None:
+            return None, QPointF()
+        if not self.visible:
+            self._set_visible(True)
+        if ov.zoom_active:
+            ov.end_zoom()
+        local = QPointF(ov.mapFromGlobal(QCursor.pos()))
+        if not QRectF(ov.rect()).contains(local):
+            local = QPointF(ov.width() / 2, ov.height() / 2)
+        return ov, local
+
+    def paste_image(self, img: QImage) -> bool:
+        ov, at = self._paste_target()
+        if ov is None or img.isNull():
+            return False
+        dpr = ov.devicePixelRatioF() or 1.0
+        # Tamaño natural en la pantalla, reducido si no cabe en la mitad de ella
+        w, h = img.width() / dpr, img.height() / dpr
+        k = min(1.0, ov.width() * 0.5 / max(w, 1), ov.height() * 0.5 / max(h, 1))
+        w, h = max(8.0, w * k), max(8.0, h * k)
+        # Se guarda a la resolución necesaria (no más), para que las sesiones no pesen de más
+        need_w = max(1, round(w * dpr * 2))
+        if img.width() > need_w:
+            img = img.scaledToWidth(need_w, Qt.TransformationMode.SmoothTransformation)
+        buf = QBuffer()
+        buf.open(QIODevice.OpenModeFlag.WriteOnly)
+        img.save(buf, "PNG")
+        x = max(0.0, min(ov.width() - w, at.x() - w / 2))
+        y = max(0.0, min(ov.height() - h, at.y() - h / 2))
+        item = ImageItem(bytes(buf.data()), x, y, w, h)
+        self.push(ov.key, item)
+        ov.apply_item(item)
+        self.set_tool(Tool.SELECT)
+        ov.set_selection([item.uid])
+        return True
+
+    def paste_text(self, text: str) -> bool:
+        ov, at = self._paste_target()
+        if ov is None:
+            return False
+        item = TextItem(self.color.getRgb(), float(self.sizes[Tool.TEXT]), self.opacities[Tool.TEXT] / 100.0,
+                        at.x(), at.y(), "".join(ch for ch in text if ch == "\n" or ch.isprintable()), self.text_bold)
+        self.push(ov.key, item)
+        ov.apply_item(item)
+        self.set_tool(Tool.SELECT)
+        ov.set_selection([item.uid])
+        return True
+
+    def delete_key(self) -> None:
+        """Supr: borra la selección si la hay; si no, la página (como antes)."""
+        if not self.delete_selection():
+            self.clear_all()
 
     def undo(self) -> None:
         self._finish_all()
@@ -726,7 +912,8 @@ class Controller(QObject):
         self.dirty = True
         if self.tool == Tool.STAMP:
             self._changed(cursor=True)
-        if isinstance(item, TextEditItem):  # sustituye a un texto anterior: hay que redibujar
+        if isinstance(item, (TextEditItem, TransformItem, DeleteItem, DuplicateItem)):
+            # Cambian elementos ya dibujados (editar, mover, eliminar, duplicar): hay que redibujar
             self._rebuild(key)
             return
         for k, ov in self.overlays.items():
@@ -932,6 +1119,7 @@ class Controller(QObject):
         screens = list(QGuiApplication.screens()) if all_screens else [self.current_screen()]
         restore = (self.visible, self.toolbar.isVisible())
         self.toolbar.hide()
+        self._hide_timer_for_grab()
         for ov in self.overlays.values():
             ov.hide()
         QTimer.singleShot(CAPTURE_DELAY_MS, lambda: self._do_capture(screens, with_drawing, restore))
@@ -967,9 +1155,22 @@ class Controller(QObject):
             if was_visible:
                 for ov in self.overlays.values():
                     ov.show()
+            self._restore_timer_after_grab()
             if toolbar_visible:
                 self._raise_toolbar(activate=self.drawing)
             self._capturing = False
+
+    def _hide_timer_for_grab(self) -> None:
+        """El temporizador no debe salir en las capturas ni quedar congelado dentro del zoom."""
+        self._timer_was_visible = self.timer_visible
+        if self._timer_was_visible:
+            self.timer_window.hide()
+
+    def _restore_timer_after_grab(self) -> None:
+        if getattr(self, "_timer_was_visible", False) and self.timer_window is not None:
+            self.timer_window.show()
+            self.timer_window.raise_()
+        self._timer_was_visible = False
 
     def open_captures_folder(self) -> None:
         try:
@@ -1092,6 +1293,7 @@ class Controller(QObject):
                             store[Tool(k)] = max(lo, min(hi, int(v)))
             self.fill_shapes = str(s.value("fill", "false")).lower() == "true"
             self.text_bold = str(s.value("text_bold", "false")).lower() == "true"
+            self.recognize_shapes = str(s.value("recognize_shapes", "false")).lower() == "true"
             kind = str(s.value("stamp_kind", "check"))
             self.stamp_kind = kind if kind in STAMPS else "check"
             extra = str(s.value("extra_shape", Tool.HEXAGON.value))
@@ -1118,6 +1320,7 @@ class Controller(QObject):
         s.setValue("fill", "true" if self.fill_shapes else "false")
         s.setValue("text_bold", "true" if self.text_bold else "false")
         s.setValue("stamp_kind", self.stamp_kind)
+        s.setValue("recognize_shapes", "true" if self.recognize_shapes else "false")
         s.setValue("extra_shape", self.extra_shape.value)
         s.setValue("background", self.background)
         s.setValue("pattern", self.pattern)

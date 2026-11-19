@@ -24,13 +24,13 @@ from typing import TYPE_CHECKING
 from PySide6.QtCore import QEvent, QPoint, QPointF, QRect, QRectF, QSize, Qt, QTimer
 from PySide6.QtGui import (
     QColor, QCursor, QFont, QGuiApplication, QImage, QInputDevice, QPainter, QPainterPath, QPen, QPixmap,
-    QPointingDevice, QRadialGradient,
+    QPointingDevice, QPolygonF, QRadialGradient,
 )
 from PySide6.QtWidgets import QWidget
 
-from . import render, winutil
-from .items import ShapeItem, StrokeItem, TextEditItem, TextItem
-from .tools import SHAPE_TOOLS, Tool
+from . import render, shape_recognition, winutil
+from .items import ClearItem, ShapeItem, StrokeItem, TextEditItem, TextItem, TransformItem, transformed
+from .tools import RECOGNIZABLE_TOOLS, SHAPE_TOOLS, Tool
 
 if TYPE_CHECKING:  # pragma: no cover
     from .app import Controller
@@ -136,6 +136,14 @@ class Overlay(QWidget):
         self._edit_uid: str | None = None  # uid del texto ya escrito que se está editando
         self._edit_orig: TextItem | None = None
         self._edit_erasers: list = []
+        # Selección (herramienta Seleccionar)
+        self.selection: list[str] = []  # uids seleccionados
+        self._sel_mode: str | None = None  # "move", "scale" o "lasso" mientras se arrastra
+        self._sel_start = QPointF()
+        self._sel_box = QRectF()  # recuadro de la selección al empezar a arrastrar
+        self._sel_t = (0.0, 0.0, 1.0)  # (dx, dy, escala) del arrastre en curso
+        self._lasso: list[QPointF] = []
+        self._sel_img: QImage | None = None  # vista previa de lo que se mueve
         self._text_drag: tuple[QPointF, float, float] | None = None  # (inicio, x, y) al arrastrar un texto
         self._state: render.StrokeState | None = None
         self._tablet_active = False
@@ -334,7 +342,10 @@ class Overlay(QWidget):
             return
         self.canvas.fill(_TRANSPARENT)
         self._clear_layer()
-        for item in self.ctrl.items_for(self.key, exclude_uid=self._edit_uid):
+        hidden = set(self.selection) if self._sel_img is not None else set()
+        if self._edit_uid is not None:
+            hidden.add(self._edit_uid)
+        for item in self.ctrl.items_for(self.key, exclude_uid=hidden):
             render.apply_item_to_canvas(self.canvas, self.layer, item)
         if self._text is not None:  # el texto en edición se dibuja aparte, en la capa
             self._render_text_preview()
@@ -398,6 +409,10 @@ class Overlay(QWidget):
             p.setOpacity(active.opacity)
             p.drawImage(QPointF(0, 0), self.layer)
             p.restore()
+        if self._sel_img is not None:
+            p.drawImage(QPointF(0, 0), self._sel_img)
+        if self.ctrl.tool == Tool.SELECT:
+            self._paint_selection(p)
         if self._text is not None:
             # Marco discontinuo: indica qué texto se está escribiendo/editando (y que se puede arrastrar)
             p.save()
@@ -633,6 +648,10 @@ class Overlay(QWidget):
     def _begin(self, pos: QPointF, pressure: float | None, t: int, eraser: bool = False) -> None:
         if not self.ctrl.drawing:
             return
+        if not eraser and self.ctrl.tool == Tool.SELECT:
+            self.finish_current()
+            self._sel_press(pos)
+            return
         if not eraser and self.ctrl.tool == Tool.TEXT and self._text is not None \
                 and render.text_hit_rect(self._text).contains(pos):
             # Clic dentro del texto que se está escribiendo: mueve el cursor (o arrastra el texto).
@@ -742,6 +761,9 @@ class Overlay(QWidget):
         self.update(self._view_rect(rect))
 
     def _move(self, pos: QPointF, pressure: float | None, t: int, modifiers) -> None:
+        if self._sel_mode is not None:
+            self._sel_drag(pos, modifiers)
+            return
         if self._text is not None and self._text_drag is not None:
             start, x0, y0 = self._text_drag
             dx, dy = pos.x() - start.x(), pos.y() - start.y()
@@ -774,6 +796,9 @@ class Overlay(QWidget):
             self.update(self._view_rect(old.united(new)))
 
     def _release(self, pos: QPointF, pressure: float | None, t: int, modifiers) -> None:
+        if self._sel_mode is not None:
+            self._sel_finish(pos, modifiers)
+            return
         if self._shape is not None:
             self._move(pos, pressure, t, modifiers)
         elif self._stroke is not None and self._stroke.tool == Tool.PEN:
@@ -790,6 +815,16 @@ class Overlay(QWidget):
         if self._stroke is not None:
             item = self._stroke
             self._stroke = None
+            if self.ctrl.recognize_shapes and item.tool in RECOGNIZABLE_TOOLS:
+                shape = shape_recognition.recognize(item)
+                if shape is not None:  # «Formas perfectas»: el trazo se sustituye por la figura
+                    old = QRectF(self._layer_rect)
+                    self._clear_layer()
+                    self.apply_item(shape, update=False)
+                    self.ctrl.push(self.key, shape)
+                    self.update(self._view_rect(old.united(render.item_rect(shape))))
+                    self._state = None
+                    return
             if item.tool == Tool.PEN:
                 # Afinado final + re-render completo como un único contorno limpio.
                 render.finalize_pen(item)
@@ -854,6 +889,169 @@ class Overlay(QWidget):
     @property
     def busy(self) -> bool:
         return self._stroke is not None or self._shape is not None or self._text is not None
+
+    # ------------------------------------------------------------------ selección
+
+    def selected_items(self) -> list:
+        chosen = set(self.selection)
+        return [i for i in self.ctrl.items_for(self.key) if getattr(i, "uid", None) in chosen]
+
+    @staticmethod
+    def items_rect(items) -> QRectF:
+        rect = QRectF()
+        for it in items:
+            rect = rect.united(render.item_rect(it))
+        return rect
+
+    def _handle_rect(self, box: QRectF) -> QRectF:
+        h = 16.0 / max(self.zoom_factor, 0.01)
+        return QRectF(box.right() - h / 2, box.bottom() - h / 2, h, h)
+
+    def selectable_items(self) -> list[tuple[int, object, list | None]]:
+        """(índice, elemento, gomas posteriores) de lo que se ve y se puede seleccionar."""
+        items = self.ctrl.items_for(self.key)
+        out = []
+        for idx, item in enumerate(items):
+            if isinstance(item, ClearItem) or render.is_eraser(item) or not getattr(item, "uid", None):
+                continue
+            later = render.erasers_after(items, idx)
+            if later is None:  # antes de un «Borrar todo»: no se ve
+                continue
+            out.append((idx, item, later))
+        return out
+
+    def item_at(self, pos: QPointF):
+        """El elemento visible (el de más arriba) cuya tinta está bajo el punto, o None."""
+        radius = max(4.0, 8.0 / max(self.zoom_factor, 0.01))
+        for _idx, item, later in reversed(self.selectable_items()):
+            if render.item_rect(item).adjusted(-radius, -radius, radius, radius).contains(pos) \
+                    and render.ink_near(item, later, pos, radius):
+                return item
+        return None
+
+    def set_selection(self, uids) -> None:
+        self.selection = list(uids)
+        self.update()
+        self.ctrl.selection_changed()
+
+    def clear_selection(self) -> None:
+        if self.selection or self._lasso or self._sel_img is not None:
+            self._sel_mode = None
+            self._lasso = []
+            had_preview = self._sel_img is not None
+            self._sel_img = None
+            self.selection = []
+            if had_preview:
+                self.rebuild()
+            self.update()
+            self.ctrl.selection_changed()
+
+    def select_all(self) -> None:
+        self.set_selection([item.uid for _i, item, later in self.selectable_items()
+                            if render.item_visible(item, later)])
+
+    def _sel_press(self, pos: QPointF) -> None:
+        box = self.items_rect(self.selected_items()) if self.selection else QRectF()
+        if self.selection and self._handle_rect(box).contains(pos):
+            self._sel_mode = "scale"
+        elif self.selection and box.contains(pos):
+            self._sel_mode = "move"
+        else:
+            hit = self.item_at(pos)
+            if hit is not None:
+                self.set_selection([hit.uid])
+                box = self.items_rect(self.selected_items())
+                self._sel_mode = "move"
+            else:
+                self.set_selection([])
+                self._sel_mode = "lasso"
+                self._lasso = [QPointF(pos)]
+                return
+        self._sel_start = QPointF(pos)
+        self._sel_box = QRectF(box)
+        self._sel_t = (0.0, 0.0, 1.0)
+        # Lo seleccionado se oculta del lienzo y se dibuja aparte mientras se arrastra
+        self._sel_img = QImage(self.canvas.size(), QImage.Format.Format_ARGB32_Premultiplied)
+        self._sel_img.setDevicePixelRatio(self.canvas.devicePixelRatio())
+        self._sel_img.fill(_TRANSPARENT)
+        self.rebuild()
+        self._render_sel_preview()
+
+    def _sel_transform(self) -> tuple[float, float, float, float, float]:
+        dx, dy, s = self._sel_t
+        return dx, dy, s, self._sel_box.left(), self._sel_box.top()
+
+    def _render_sel_preview(self) -> None:
+        if self._sel_img is None:
+            return
+        self._sel_img.fill(_TRANSPARENT)
+        dx, dy, s, ox, oy = self._sel_transform()
+        for item in self.selected_items():
+            render.apply_item_to_canvas(self._sel_img, self.layer, transformed(item, dx, dy, s, ox, oy))
+        self.update()
+
+    def _sel_drag(self, pos: QPointF, modifiers) -> None:
+        if self._sel_mode == "lasso":
+            if not self._lasso or math.hypot(pos.x() - self._lasso[-1].x(), pos.y() - self._lasso[-1].y()) >= 2:
+                self._lasso.append(QPointF(pos))
+                self.update()
+            return
+        if self._sel_mode == "move":
+            dx, dy = pos.x() - self._sel_start.x(), pos.y() - self._sel_start.y()
+            if modifiers & Qt.KeyboardModifier.ShiftModifier:  # Mayús: solo en horizontal o vertical
+                if abs(dx) >= abs(dy):
+                    dy = 0.0
+                else:
+                    dx = 0.0
+            self._sel_t = (dx, dy, 1.0)
+        elif self._sel_mode == "scale":
+            o = self._sel_box.topLeft()
+            c = self._sel_box.bottomRight()
+            vx, vy = c.x() - o.x(), c.y() - o.y()
+            d2 = vx * vx + vy * vy
+            if d2 > 1:
+                s = ((pos.x() - o.x()) * vx + (pos.y() - o.y()) * vy) / d2
+                self._sel_t = (0.0, 0.0, max(0.1, min(10.0, s)))
+        self._render_sel_preview()
+
+    def _sel_finish(self, pos: QPointF, modifiers) -> None:
+        mode, self._sel_mode = self._sel_mode, None
+        if mode == "lasso":
+            poly = QPolygonF(self._lasso)
+            self._lasso = []
+            if len(poly) >= 3 and poly.boundingRect().width() + poly.boundingRect().height() > 8:
+                self.set_selection([item.uid for _i, item, later in self.selectable_items()
+                                    if _in_lasso(item, poly) and render.item_visible(item, later)])
+            self.update()
+            return
+        self._sel_drag(pos, modifiers)
+        dx, dy, s, ox, oy = self._sel_transform()
+        self._sel_img = None
+        if math.hypot(dx, dy) >= 1.0 or abs(s - 1.0) > 1e-3:
+            self.ctrl.push(self.key, TransformItem(list(self.selection), dx, dy, s, ox, oy))
+        self.rebuild()
+        self.ctrl.selection_changed()
+
+    def _paint_selection(self, p: QPainter) -> None:
+        p.save()
+        pen = QPen(QColor(30, 136, 229, 230), 1.5, Qt.PenStyle.DashLine)
+        pen.setCosmetic(True)
+        p.setPen(pen)
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        if self._lasso:
+            p.drawPolyline(QPolygonF(self._lasso))
+        if self.selection:
+            box = self.items_rect(self.selected_items())
+            if self._sel_mode in ("move", "scale"):
+                dx, dy, s, ox, oy = self._sel_transform()
+                b = self._sel_box
+                box = QRectF(ox + (b.left() - ox) * s + dx, oy + (b.top() - oy) * s + dy, b.width() * s, b.height() * s)
+            if not box.isEmpty():
+                p.drawRect(box)
+                p.setPen(QPen(QColor(255, 255, 255), 1.5))
+                p.setBrush(QColor(30, 136, 229))
+                p.drawRect(self._handle_rect(box))
+        p.restore()
 
     # ------------------------------------------------------------------ texto
 
@@ -1111,6 +1309,15 @@ class Overlay(QWidget):
 # ---------------------------------------------------------------------- cursores
 
 
+def _in_lasso(item, poly: QPolygonF) -> bool:
+    """¿Queda el elemento dentro del lazo? (trazos: la mayoría de sus puntos; el resto: su centro)."""
+    fill = Qt.FillRule.OddEvenFill
+    if isinstance(item, StrokeItem) and item.points:
+        inside = sum(poly.containsPoint(QPointF(x, y), fill) for x, y, _w in item.points)
+        return inside >= len(item.points) * 0.6
+    return poly.containsPoint(render.item_rect(item).center(), fill)
+
+
 def make_stamp_cursor(stamp, view_size: float, dpr: float) -> QCursor:
     """Cursor con la vista previa del sello (semitransparente), centrado en el punto del clic."""
     d = max(12.0, min(float(view_size), 200.0))
@@ -1129,6 +1336,8 @@ def make_tool_cursor(tool: Tool, size: float, dpr: float) -> QCursor:
     """Cursor que muestra el tamaño real del pincel / goma (``size`` ya en píxeles de la vista)."""
     if tool in SHAPE_TOOLS or tool == Tool.STAMP:
         return QCursor(Qt.CursorShape.CrossCursor)
+    if tool == Tool.SELECT:
+        return QCursor(Qt.CursorShape.ArrowCursor)
     if tool == Tool.TEXT:
         return QCursor(Qt.CursorShape.IBeamCursor)
     if tool == Tool.LASER:
