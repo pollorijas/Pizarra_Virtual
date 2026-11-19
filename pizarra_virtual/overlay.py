@@ -174,6 +174,7 @@ class Overlay(QWidget):
         self._touch_active = False  # gesto táctil en curso (el ratón simulado se ignora)
         self._touch: dict | None = None
         self.touch_events = 0  # eventos táctiles recibidos (diagnóstico)
+        self.touch_sizes: list = []  # tamaños de contacto vistos (diagnóstico)
         self._last_pos = QPointF()
         self._last_t = 0
         # Estado de la pluma
@@ -1715,8 +1716,11 @@ class Overlay(QWidget):
 
     def _contact_size(self, pt) -> float:
         """Ancho del contacto (px lógicos): el que da Qt o, en Windows, el que informa el sistema."""
-        return max(pt.ellipseDiameters().width(), pt.ellipseDiameters().height(),
+        size = max(pt.ellipseDiameters().width(), pt.ellipseDiameters().height(),
                    self.ctrl.touch_contact_size() / (self.devicePixelRatioF() or 1.0))
+        self.touch_sizes.append((round(size), pt.state().name))  # diagnóstico
+        del self.touch_sizes[:-40]
+        return size
 
     def _palm_eraser(self, g: dict, size: float) -> None:
         """La palma borra, con una goma del tamaño del contacto (se restaura al levantarla)."""
