@@ -18,11 +18,33 @@ class Tool(str, Enum):
     TRIANGLE = "triangle"
     LINE = "line"
     ARROW = "arrow"
+    # Figuras adicionales (botón «Más figuras»)
+    PENTAGON = "pentagon"
+    HEXAGON = "hexagon"
+    OCTAGON = "octagon"
+    DIAMOND = "diamond"
+    STAR = "star"
+    ROUNDED_RECT = "rounded_rect"
+    AXES = "axes"
+    DOUBLE_ARROW = "double_arrow"
+    CURVED_ARROW = "curved_arrow"
+    BRACE = "brace"
+    # Sellos
+    STAMP = "stamp"
 
 
 FREEHAND_TOOLS = (Tool.BRUSH, Tool.PENCIL, Tool.PEN, Tool.HIGHLIGHTER, Tool.ERASER)
-SHAPE_TOOLS = (Tool.RECT, Tool.ELLIPSE, Tool.TRIANGLE, Tool.LINE, Tool.ARROW)
-FILLABLE_SHAPES = (Tool.RECT, Tool.ELLIPSE, Tool.TRIANGLE)
+EXTRA_SHAPES = (Tool.PENTAGON, Tool.HEXAGON, Tool.OCTAGON, Tool.DIAMOND, Tool.STAR, Tool.ROUNDED_RECT,
+                Tool.AXES, Tool.DOUBLE_ARROW, Tool.CURVED_ARROW, Tool.BRACE)
+SHAPE_TOOLS = (Tool.RECT, Tool.ELLIPSE, Tool.TRIANGLE, Tool.LINE, Tool.ARROW) + EXTRA_SHAPES
+FILLABLE_SHAPES = (Tool.RECT, Tool.ELLIPSE, Tool.TRIANGLE, Tool.PENTAGON, Tool.HEXAGON, Tool.OCTAGON,
+                   Tool.DIAMOND, Tool.STAR, Tool.ROUNDED_RECT)
+# Figuras que se dibujan de un punto a otro (con Mayús: ángulos de 15°)
+LINEAR_SHAPES = (Tool.LINE, Tool.ARROW, Tool.DOUBLE_ARROW, Tool.CURVED_ARROW)
+# Herramientas con botón propio en la barra (el resto va en los menús «Más figuras» y «Sellos»)
+MAIN_TOOLS = (Tool.BRUSH, Tool.PENCIL, Tool.PEN, Tool.HIGHLIGHTER, Tool.ERASER, Tool.TEXT, Tool.LASER,
+              Tool.RECT, Tool.ELLIPSE, Tool.TRIANGLE, Tool.LINE, Tool.ARROW)
+POLYGON_SIDES = {Tool.PENTAGON: 5, Tool.HEXAGON: 6, Tool.OCTAGON: 8}
 
 
 class BrushType(str, Enum):
@@ -65,6 +87,27 @@ TOOL_SPECS: dict[Tool, ToolSpec] = {
     Tool.TRIANGLE: ToolSpec("Triángulo", "8", "triangle", 4, 1, 40, 100),
     Tool.LINE: ToolSpec("Línea", "9", "line", 4, 1, 40, 100),
     Tool.ARROW: ToolSpec("Flecha", "0", "arrow", 4, 1, 40, 100),
+    Tool.PENTAGON: ToolSpec("Pentágono", "P", "pentagon", 4, 1, 40, 100),
+    Tool.HEXAGON: ToolSpec("Hexágono", "P", "hexagon", 4, 1, 40, 100),
+    Tool.OCTAGON: ToolSpec("Octágono", "P", "octagon", 4, 1, 40, 100),
+    Tool.DIAMOND: ToolSpec("Rombo", "D", "diamond", 4, 1, 40, 100),
+    Tool.STAR: ToolSpec("Estrella", "E", "star", 4, 1, 40, 100),
+    Tool.ROUNDED_RECT: ToolSpec("Rectángulo redondeado", "Q", "rounded_rect", 4, 1, 40, 100),
+    Tool.AXES: ToolSpec("Ejes de coordenadas", "J", "axes", 3, 1, 20, 100),
+    Tool.DOUBLE_ARROW: ToolSpec("Flecha doble", "W", "double_arrow", 4, 1, 40, 100),
+    Tool.CURVED_ARROW: ToolSpec("Flecha curva", "U", "curved_arrow", 4, 1, 40, 100),
+    Tool.BRACE: ToolSpec("Llave", "K", "brace", 4, 1, 40, 100),
+    Tool.STAMP: ToolSpec("Sellos", "S", "stamp", 56, 20, 200, 100),
+}
+
+# Sellos: clave -> etiqueta
+STAMPS = {
+    "check": "Correcto ✔",
+    "cross": "Incorrecto ✘",
+    "star": "Estrella",
+    "smiley": "Carita feliz",
+    "number": "Número (1, 2, 3…)",
+    "question": "Pregunta ?",
 }
 
 PALETTE = [

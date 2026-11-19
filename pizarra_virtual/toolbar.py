@@ -11,7 +11,11 @@ from PySide6.QtWidgets import (
 )
 
 from . import icons
-from .tools import BACKGROUNDS, BRUSH_LABELS, FILLABLE_SHAPES, PALETTE, PATTERNS, TOOL_SPECS, BrushType, Tool
+from . import templates
+from .tools import (
+    BACKGROUNDS, BRUSH_LABELS, EXTRA_SHAPES, FILLABLE_SHAPES, MAIN_TOOLS, PALETTE, PATTERNS, STAMPS, TOOL_SPECS,
+    BrushType, Tool,
+)
 
 if TYPE_CHECKING:  # pragma: no cover
     from .app import Controller
@@ -105,6 +109,50 @@ class Toolbar(QWidget):
         b.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         return b
 
+    def _menu_button(self, icon_name: str, tip: str, build_menu, checkable: bool = True) -> QToolButton:
+        """Botón que al pulsarlo despliega un menú (se reconstruye cada vez: muestra la opción actual)."""
+        b = self._tool_button(icon_name, tip, checkable=checkable)
+        b.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        b.setStyleSheet("QToolButton::menu-indicator { image: none; width: 0px; }")
+        menu = QMenu(b)
+        menu.aboutToShow.connect(lambda m=menu: build_menu(m))
+        b.setMenu(menu)
+        return b
+
+    def build_shapes_menu(self, menu: QMenu | None = None) -> QMenu:
+        menu = menu if menu is not None else QMenu(self)
+        menu.clear()
+        groups = ((Tool.PENTAGON, Tool.HEXAGON, Tool.OCTAGON), (Tool.DIAMOND, Tool.STAR, Tool.ROUNDED_RECT),
+                  (Tool.AXES, Tool.DOUBLE_ARROW, Tool.CURVED_ARROW, Tool.BRACE))
+        for gi, group in enumerate(groups):
+            if gi:
+                menu.addSeparator()
+            for tool in group:
+                spec = TOOL_SPECS[tool]
+                act = menu.addAction(icons.icon(spec.icon), f"{spec.label}\t{spec.key}")
+                act.setCheckable(True)
+                act.setChecked(self.ctrl.tool == tool)
+                act.triggered.connect(lambda _c=False, t=tool: self.ctrl.set_tool(t))
+        return menu
+
+    def build_stamps_menu(self, menu: QMenu | None = None) -> QMenu:
+        menu = menu if menu is not None else QMenu(self)
+        menu.clear()
+        for kind, label in STAMPS.items():
+            act = menu.addAction(icons.icon("stamp_" + kind), label)
+            act.setCheckable(True)
+            act.setChecked(self.ctrl.tool == Tool.STAMP and self.ctrl.stamp_kind == kind)
+            act.triggered.connect(lambda _c=False, k=kind: self.ctrl.set_stamp_kind(k))
+        return menu
+
+    def build_templates_menu(self, menu: QMenu | None = None) -> QMenu:
+        menu = menu if menu is not None else QMenu(self)
+        menu.clear()
+        for key, (label, _fn) in templates.TEMPLATES.items():
+            act = menu.addAction(label)
+            act.triggered.connect(lambda _c=False, k=key: self.ctrl.insert_template(k))
+        return menu
+
     def _build(self) -> None:
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -174,12 +222,24 @@ class Toolbar(QWidget):
         self.tool_group = QButtonGroup(self)
         self.tool_group.setExclusive(True)
         self.tool_buttons: dict[Tool, QToolButton] = {}
-        for idx, (tool, spec) in enumerate(TOOL_SPECS.items()):
+        for idx, tool in enumerate(MAIN_TOOLS):
+            spec = TOOL_SPECS[tool]
             b = self._tool_button(spec.icon, f"{spec.label}  [{spec.key}]", checkable=True)
             b.clicked.connect(lambda _=False, t=tool: self.ctrl.set_tool(t))
             self.tool_group.addButton(b)
             self.tool_buttons[tool] = b
             grid.addWidget(b, idx // 3, idx % 3)
+        # Más figuras, sellos y plantillas: un botón con menú cada uno
+        n = len(MAIN_TOOLS)
+        self.more_shapes_btn = self._menu_button("shapes_more", "Más figuras: polígonos, rombo, estrella, ejes,\n"
+                                                                 "flecha doble, flecha curva, llave…", self.build_shapes_menu)
+        self.stamp_btn = self._menu_button("stamp", "Sellos: ✔, ✘, estrella, carita, números, ?  [S]",
+                                           self.build_stamps_menu)
+        self.templates_btn = self._menu_button("templates", "Plantillas: mapa conceptual, línea de tiempo,\n"
+                                                            "diagramas de Venn, tablas, esquema de redacción…",
+                                               self.build_templates_menu, checkable=False)
+        for k, b in enumerate((self.more_shapes_btn, self.stamp_btn, self.templates_btn)):
+            grid.addWidget(b, (n + k) // 3, (n + k) % 3)
         c1.addLayout(grid)
 
         # Tipo de pincel
@@ -364,7 +424,10 @@ class Toolbar(QWidget):
             self._shortcuts.append(sc)
 
         for tool, spec in TOOL_SPECS.items():
-            add(spec.key, lambda t=tool: c.set_tool(t))
+            if spec.key not in ("P", "S"):  # P y S tienen su propio ciclo (abajo)
+                add(spec.key, lambda t=tool: c.set_tool(t))
+        add("P", c.cycle_polygon)
+        add("S", c.cycle_stamp)
         add("B", c.cycle_brush_type)
         add("R", lambda: c.set_fill(not c.fill_shapes))
         add("F", c.toggle_spotlight)
@@ -510,7 +573,18 @@ class Toolbar(QWidget):
         for w in widgets:
             w.blockSignals(True)
         try:
-            self.tool_buttons[c.tool].setChecked(True)
+            if c.tool in self.tool_buttons:
+                self.tool_group.setExclusive(True)
+                self.tool_buttons[c.tool].setChecked(True)
+            else:  # figura del menú o sello: ningún botón principal marcado
+                self.tool_group.setExclusive(False)
+                for b in self.tool_buttons.values():
+                    b.setChecked(False)
+            self.more_shapes_btn.setChecked(c.tool in EXTRA_SHAPES)
+            self.more_shapes_btn.setIcon(icons.icon(TOOL_SPECS[c.extra_shape].icon if c.tool in EXTRA_SHAPES
+                                                    else "shapes_more"))
+            self.stamp_btn.setChecked(c.tool == Tool.STAMP)
+            self.stamp_btn.setIcon(icons.icon("stamp_" + c.stamp_kind if c.tool == Tool.STAMP else "stamp"))
             self.mode_btn.setChecked(c.drawing)
             self.mode_btn.setText("Dibujando" if c.drawing else "Ratón libre")
             self.mode_btn.setIcon(icons.icon("pencil" if c.drawing else "mouse"))
@@ -530,7 +604,7 @@ class Toolbar(QWidget):
 
             self.size_slider.setRange(spec.min_size, spec.max_size)
             self.size_slider.setValue(int(c.size_for(c.tool)))
-            what = {Tool.TEXT: "Letra", Tool.LASER: "Tamaño"}.get(c.tool, "Grosor")
+            what = {Tool.TEXT: "Letra", Tool.LASER: "Tamaño", Tool.STAMP: "Tamaño"}.get(c.tool, "Grosor")
             self.size_label.setText(f"{what}: {int(c.size_for(c.tool))} px")
             self.size_label.setToolTip(spec.label)
 

@@ -73,6 +73,29 @@ def render_all_tools():
         p.end()
         results[f"pattern:{pattern}"] = painted(img)
 
+    # Sellos y plantillas
+    from .items import StampItem, flatten
+    from .tools import STAMPS
+    from . import templates
+    from PySide6.QtCore import QRectF
+
+    for kind in STAMPS:
+        img = blank()
+        p = QPainter(img)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        render.draw_stamp(p, StampItem(kind, (30, 100, 200, 255), 80, 1.0, 120, 80, "7"))
+        p.end()
+        results[f"stamp:{kind}"] = painted(img)
+    for key in templates.TEMPLATES:
+        img = QImage(480, 320, QImage.Format.Format_ARGB32_Premultiplied)
+        img.fill(Qt.GlobalColor.transparent)
+        p = QPainter(img)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        for it in flatten([templates.build(key, QRectF(10, 10, 460, 300), (20, 20, 20, 255), 3)]):
+            render.draw_item(p, it)
+        p.end()
+        results[f"template:{key}"] = painted(img)
+
     # La goma debe borrar lo pintado
     img = blank()
     img.fill(Qt.GlobalColor.black)

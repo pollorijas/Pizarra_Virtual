@@ -63,11 +63,45 @@ class TextEditItem:
 
 
 @dataclass
+class StampItem:
+    """Sello (✔, ✘, estrella, carita, número, interrogación) centrado en (x, y)."""
+
+    kind: str
+    rgba: tuple[int, int, int, int]  # se usa en el sello de número
+    size: float  # diámetro en píxeles lógicos
+    opacity: float
+    x: float
+    y: float
+    label: str = ""  # número del sello «number»
+
+
+@dataclass
+class GroupItem:
+    """Varios elementos que se añaden y se deshacen juntos (p. ej. una plantilla).
+
+    Sus textos se pueden editar después uno a uno (TextEditItem).
+    """
+
+    items: list = field(default_factory=list)
+
+
+@dataclass
 class ClearItem:
     """Borrado completo del lienzo (se puede deshacer)."""
 
 
-Item = StrokeItem | ShapeItem | TextItem | TextEditItem | ClearItem
+Item = StrokeItem | ShapeItem | TextItem | TextEditItem | StampItem | GroupItem | ClearItem
+
+
+def flatten(items) -> list:
+    """Despliega los grupos (plantillas) en sus elementos, en orden."""
+    out = []
+    for item in items:
+        if isinstance(item, GroupItem):
+            out.extend(flatten(item.items))
+        else:
+            out.append(item)
+    return out
 
 
 def resolve_items(items, exclude_uid: str | None = None) -> list:
@@ -78,7 +112,7 @@ def resolve_items(items, exclude_uid: str | None = None) -> list:
     un texto (el que se está editando, que se dibuja aparte).
     """
     out: list = []
-    for item in items:
+    for item in flatten(items):
         if isinstance(item, TextEditItem):
             for i in range(len(out) - 1, -1, -1):
                 o = out[i]

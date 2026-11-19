@@ -338,6 +338,72 @@ def _chevron_down(p, c):
     p.drawPolyline(_poly((6, 9), (12, 15), (18, 9)))
 
 
+def _shape_icon(tool_value: str):
+    """Icono de una figura dibujado con el mismo código que la pizarra (a doble escala y reducido,
+    para que puntas de flecha y rótulos queden proporcionados en 24 px)."""
+    def draw(p, c):
+        from .items import ShapeItem
+        from .render import draw_shape
+        from .tools import LINEAR_SHAPES, Tool
+
+        tool = Tool(tool_value)
+        rgba = c.getRgb()
+        if tool == Tool.BRACE:
+            item = ShapeItem(tool, rgba, 3.4, 1.0, 16, 6, 30, 42)
+        elif tool in LINEAR_SHAPES:
+            item = ShapeItem(tool, rgba, 2.6, 1.0, 6, 42, 42, 6)
+        elif tool == Tool.AXES:
+            item = ShapeItem(tool, rgba, 2.0, 1.0, 4, 4, 44, 44)
+        else:
+            item = ShapeItem(tool, rgba, 3.4, 1.0, 7, 7, 41, 41)
+        p.save()
+        p.scale(0.5, 0.5)
+        draw_shape(p, item)
+        p.restore()
+    return draw
+
+
+def _stamp_icon(kind: str):
+    def draw(p, c):
+        from .items import StampItem
+        from .render import draw_stamp
+
+        draw_stamp(p, StampItem(kind, (229, 57, 53, 255), 20, 1.0, 12, 12, "1"))
+    return draw
+
+
+def _shapes_more(p, c):
+    """Más figuras: hexágono, estrella pequeña y flecha curva."""
+    _shape_icon("hexagon")(p, c)
+    p.setPen(_pen(c, 1.4))
+    p.setBrush(c)
+    p.drawEllipse(QPointF(19.5, 19.5), 2.6, 2.6)
+
+
+def _stamp(p, c):
+    """Sello de goma."""
+    p.setPen(_pen(c, 1.7))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawRoundedRect(QRectF(9, 3, 6, 8), 2, 2)
+    p.drawLine(QPointF(12, 11), QPointF(12, 14))
+    p.drawRoundedRect(QRectF(4, 14, 16, 4), 1.5, 1.5)
+    p.drawLine(QPointF(5, 21), QPointF(19, 21))
+
+
+def _templates(p, c):
+    """Plantilla: recuadro central unido a tres ideas."""
+    p.setPen(_pen(c, 1.5))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawRoundedRect(QRectF(8, 9.5, 8, 5), 1.5, 1.5)
+    for x, y in ((2, 2), (16, 2), (2, 17)):
+        p.drawRoundedRect(QRectF(x, y, 6, 5), 1.2, 1.2)
+    p.drawLine(QPointF(8, 9.5), QPointF(6.5, 7))
+    p.drawLine(QPointF(16, 9.5), QPointF(17.5, 7))
+    p.drawLine(QPointF(8, 14.5), QPointF(6.5, 17))
+    p.setBrush(c)
+    p.drawEllipse(QPointF(19, 19.5), 2.2, 2.2)
+
+
 _ICONS = {
     "brush": _brush, "pencil": _pencil, "pen": _pen_nib, "highlighter": _highlighter,
     "eraser": _eraser, "rect": _rect, "ellipse": _ellipse, "triangle": _triangle,
@@ -346,7 +412,13 @@ _ICONS = {
     "mouse": _mouse, "help": _help, "zoom": _zoom, "text": _text, "laser": _laser, "spotlight": _spotlight,
     "curtain": _curtain, "highlight": _highlight, "page_prev": _page_prev, "page_next": _page_next,
     "page_add": _page_add, "file": _file, "save": _save, "pdf": _pdf, "bold": _bold, "chevron_up": _chevron_up, "chevron_down": _chevron_down,
+    "shapes_more": _shapes_more, "stamp": _stamp, "templates": _templates,
 }
+for _name in ("pentagon", "hexagon", "octagon", "diamond", "star", "rounded_rect", "axes", "double_arrow",
+              "curved_arrow", "brace"):
+    _ICONS[_name] = _shape_icon(_name)
+for _kind in ("check", "cross", "star", "smiley", "number", "question"):
+    _ICONS["stamp_" + _kind] = _stamp_icon(_kind)
 
 
 def icon_pixmap(name: str, color: str = FG, size: int = 24, scale: int = 3) -> QPixmap:

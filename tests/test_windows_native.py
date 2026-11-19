@@ -464,3 +464,62 @@ def test_native_edit_written_text_with_real_mouse_and_keyboard(ctrl, qapp):
     assert abs(e.x - (t.x + 120)) <= 2 and abs(e.y - (t.y + 72)) <= 2
     assert ctrl.tool == Tool.TEXT and not ctrl.spotlight
     _grab("texto_editado.png")
+
+
+def test_native_erased_text_stamps_and_templates_with_real_input(ctrl, qapp):
+    """Ratón y teclado reales: un texto borrado con la goma ya no se reabre (el clic crea uno nuevo),
+    un clic con Sellos pone el sello, y un rótulo de plantilla se edita con un clic."""
+    from pizarra_virtual import render
+    from pizarra_virtual.items import GroupItem, StampItem, TextEditItem, TextItem
+    from pizarra_virtual.tools import Tool
+
+    _, _, user32 = _win32()
+    ov = _overlay(ctrl)
+    dpr = ov.devicePixelRatioF()
+
+    def esc():
+        user32.keybd_event(0x1B, 0, 0, 0)
+        user32.keybd_event(0x1B, 0, 2, 0)
+        _settle(qapp, 200)
+
+    # 1) texto borrado con la goma
+    ctrl.set_tool(Tool.TEXT)
+    ctrl.set_size(48)
+    _settle(qapp)
+    _real_mouse(qapp, [(300, 250), (300, 250)], dpr)
+    _real_keys(qapp, "borrar")
+    esc()
+    (t,) = [i for i in ctrl.items_for(ov.key) if isinstance(i, TextItem)]
+    box = render.text_box(t)
+    ctrl.set_tool(Tool.ERASER)
+    ctrl.set_size(120)
+    cy = box.center().y()
+    _real_mouse(qapp, [(x, cy) for x in range(int(box.left()) - 60, int(box.right()) + 60, 12)], dpr)
+    ctrl.set_tool(Tool.TEXT)
+    _real_mouse(qapp, [(box.center().x(), cy), (box.center().x(), cy)], dpr)
+    assert ov.editing_text is not None and ov.editing_text.uid != t.uid  # texto nuevo, no el borrado
+    esc()
+
+    # 2) sello con un clic real
+    ctrl.set_stamp_kind("check")
+    _settle(qapp)
+    _real_mouse(qapp, [(500, 420), (500, 420)], dpr)
+    assert isinstance(ctrl.history[-1][1], StampItem)
+
+    # 3) plantilla y edición de un rótulo
+    ctrl.clear_all()
+    ctrl.insert_template("essay")
+    _settle(qapp, 300)
+    assert isinstance(ctrl.history[-1][1], GroupItem) and ctrl.tool == Tool.TEXT
+    intro = next(i for i in ctrl.items_for(ov.key) if isinstance(i, TextItem) and i.text == "Introducción")
+    c = render.text_box(intro).center()
+    _real_mouse(qapp, [(c.x(), c.y()), (c.x(), c.y())], dpr)
+    assert ov.editing_text is not None and ov.editing_text.uid == intro.uid
+    user32.keybd_event(0x23, 0, 0, 0)  # Fin
+    user32.keybd_event(0x23, 0, 2, 0)
+    _real_keys(qapp, " uno")
+    esc()
+    assert isinstance(ctrl.history[-1][1], TextEditItem)
+    texts = [i.text.lower() for i in ctrl.items_for(ov.key) if isinstance(i, TextItem)]
+    assert "introducción uno" in texts
+    _grab("plantilla_editada.png")

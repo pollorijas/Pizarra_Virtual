@@ -327,8 +327,6 @@ def test_rectangular_spotlight_is_a_wide_band(ctrl):
 
 
 def test_spotlight_shape_shortcut_menu_tray_and_settings(ctrl, qapp, tmp_path):
-    from PySide6.QtCore import QSettings
-
     from pizarra_virtual.app import Controller
 
     assert ctrl.spotlight_shape == "circle" and not ctrl.spotlight

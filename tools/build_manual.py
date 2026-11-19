@@ -256,9 +256,65 @@ def build_images() -> dict[str, QImage]:
     QTest.mouseRelease(ov, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, QPoint(560, 110))
     images["presentacion.png"] = _mosaic([foco, foco_rect, cortina, resaltar, laser, _texto_editado(ctrl, ov, shot)], 2)
 
+    images["figuras.png"] = _shapes_and_stamps()
+    images["plantillas.png"] = _templates_mosaic()
+
     ctrl.dirty = False
     ctrl.shutdown()
     return images
+
+
+def _shapes_and_stamps() -> QImage:
+    """Las figuras de «Más figuras» y los sellos, con su nombre."""
+    from pizarra_virtual import render
+    from pizarra_virtual.items import ShapeItem, StampItem
+    from pizarra_virtual.tools import EXTRA_SHAPES, LINEAR_SHAPES, STAMPS, TOOL_SPECS
+
+    cell_w, cell_h, cols = 150, 150, 6
+    entries = [("shape", t) for t in EXTRA_SHAPES] + [("stamp", k) for k in STAMPS]
+    rows = math.ceil(len(entries) / cols)
+    img = QImage(cols * cell_w, rows * cell_h, QImage.Format.Format_RGB32)
+    img.fill(QColor(255, 255, 255))
+    p = QPainter(img)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    f = QFont()
+    f.setPixelSize(14)
+    for i, (kind, what) in enumerate(entries):
+        x, y = (i % cols) * cell_w, (i // cols) * cell_h
+        if kind == "shape":
+            if what in LINEAR_SHAPES:
+                x1, y1, x2, y2 = x + 25, y + 100, x + 125, y + 25
+            else:
+                x1, y1, x2, y2 = x + 30, y + 15, x + 120, y + 105
+            render.draw_shape(p, ShapeItem(what, (27, 63, 122, 255), 4, 1.0, x1, y1, x2, y2))
+            label = TOOL_SPECS[what].label
+        else:
+            render.draw_stamp(p, StampItem(what, (229, 57, 53, 255), 70, 1.0, x + cell_w / 2, y + 62, "1"))
+            label = "Sello: " + STAMPS[what].split(" (")[0]
+        p.setFont(f)
+        p.setPen(QColor(60, 60, 60))
+        p.drawText(QRectF(x + 4, y + 112, cell_w - 8, 38),
+                   Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap, label)
+    p.end()
+    return img
+
+
+def _templates_mosaic() -> QImage:
+    from pizarra_virtual import render, templates
+    from pizarra_virtual.items import flatten
+
+    tiles = []
+    for key, (label, _fn) in templates.TEMPLATES.items():
+        tile = QImage(640, 400, QImage.Format.Format_ARGB32)
+        tile.fill(QColor(255, 255, 255))
+        p = QPainter(tile)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        for it in flatten([templates.build(key, QRectF(20, 70, 600, 320), (27, 63, 122, 255), 3)]):
+            render.draw_item(p, it)
+        p.end()
+        short = {"venn2": "Venn (2 conjuntos)", "venn3": "Venn (3 conjuntos)"}.get(key, label.split(" (")[0])
+        tiles.append(_label(tile, short))
+    return _mosaic(tiles, 3)
 
 
 def build_pdf(out: str, images: dict[str, QImage]) -> str:

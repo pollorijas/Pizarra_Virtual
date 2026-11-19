@@ -11,14 +11,15 @@ from __future__ import annotations
 
 import math
 import random
+from dataclasses import replace
 
-from PySide6.QtCore import QPointF, QRectF, Qt
+from PySide6.QtCore import QPointF, QRectF, QSizeF, Qt
 from PySide6.QtGui import (
     QBrush, QColor, QFont, QFontMetricsF, QImage, QPainter, QPainterPath, QPen, QPolygonF, QRadialGradient,
 )
 
-from .items import ClearItem, ShapeItem, StrokeItem, TextItem
-from .tools import FILLABLE_SHAPES, BrushType, Tool
+from .items import ClearItem, GroupItem, ShapeItem, StampItem, StrokeItem, TextItem
+from .tools import FILLABLE_SHAPES, LINEAR_SHAPES, POLYGON_SIDES, BrushType, Tool
 
 NIB_ANGLE = math.radians(40)      # ángulo de la punta caligráfica
 HIGHLIGHTER_RATIO = 0.30          # ancho/alto de la punta biselada del destacador
@@ -436,7 +437,7 @@ def stroke_rect(item: StrokeItem) -> QRectF:
 def constrain_shape(tool: Tool, x1, y1, x2, y2):
     """Con Mayús: proporciones iguales (cuadrado, círculo) o ángulos de 15° (línea/flecha)."""
     dx, dy = x2 - x1, y2 - y1
-    if tool in (Tool.LINE, Tool.ARROW):
+    if tool in LINEAR_SHAPES:
         length = math.hypot(dx, dy)
         if length == 0:
             return x2, y2
@@ -458,12 +459,15 @@ def draw_shape(p: QPainter, item: ShapeItem) -> None:
     x1, y1, x2, y2 = item.x1, item.y1, item.x2, item.y2
     rect = QRectF(QPointF(x1, y1), QPointF(x2, y2)).normalized()
 
-    join = Qt.PenJoinStyle.RoundJoin if tool == Tool.ELLIPSE else Qt.PenJoinStyle.MiterJoin
+    rounded = (Tool.ELLIPSE, Tool.STAR, Tool.ROUNDED_RECT, Tool.CURVED_ARROW, Tool.BRACE)
+    join = Qt.PenJoinStyle.RoundJoin if tool in rounded else Qt.PenJoinStyle.MiterJoin
     pen = QPen(color, w, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, join)
     p.setPen(pen)
     p.setBrush(color if (item.filled and tool in FILLABLE_SHAPES) else Qt.BrushStyle.NoBrush)
 
-    if tool == Tool.RECT:
+    if tool in EXTRA_DRAWERS:
+        EXTRA_DRAWERS[tool](p, item, rect, color, w)
+    elif tool == Tool.RECT:
         p.drawRect(rect)
     elif tool == Tool.ELLIPSE:
         p.drawEllipse(rect)
@@ -477,27 +481,193 @@ def draw_shape(p: QPainter, item: ShapeItem) -> None:
         length = math.hypot(x2 - x1, y2 - y1)
         if length < 0.5:
             return
-        ux, uy = (x2 - x1) / length, (y2 - y1) / length
         head = min(arrow_head_length(w), length)
-        half = head * 0.5
-        bx, by = x2 - ux * head, y2 - uy * head
-        shaft_end = QPointF(x2 - ux * head * 0.6, y2 - uy * head * 0.6)
         if length > head * 0.6:
-            p.drawLine(QPointF(x1, y1), shaft_end)
-        p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(color)
-        p.drawPolygon(QPolygonF([
-            QPointF(x2, y2),
-            QPointF(bx - uy * half, by + ux * half),
-            QPointF(bx + uy * half, by - ux * half),
-        ]))
+            p.drawLine(QPointF(x1, y1), _toward(QPointF(x2, y2), QPointF(x1, y1), head * 0.6))
+        _arrow_head(p, QPointF(x1, y1), QPointF(x2, y2), head, color)
+
+
+def _toward(tip: QPointF, origin: QPointF, dist: float) -> QPointF:
+    """Punto a ``dist`` de ``tip`` en dirección a ``origin``."""
+    dx, dy = origin.x() - tip.x(), origin.y() - tip.y()
+    n = math.hypot(dx, dy) or 1.0
+    return QPointF(tip.x() + dx / n * dist, tip.y() + dy / n * dist)
+
+
+def _arrow_head(p: QPainter, frm: QPointF, tip: QPointF, head: float, color: QColor) -> None:
+    """Punta de flecha rellena en ``tip`` orientada según la dirección frm → tip."""
+    dx, dy = tip.x() - frm.x(), tip.y() - frm.y()
+    n = math.hypot(dx, dy)
+    if n < 1e-6:
+        return
+    ux, uy = dx / n, dy / n
+    half = head * 0.5
+    bx, by = tip.x() - ux * head, tip.y() - uy * head
+    p.save()
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(color)
+    p.drawPolygon(QPolygonF([tip, QPointF(bx - uy * half, by + ux * half), QPointF(bx + uy * half, by - ux * half)]))
+    p.restore()
+
+
+def _regular_polygon(rect: QRectF, sides: int, inner: float = 0.0) -> QPolygonF:
+    """Polígono regular inscrito en el rectángulo (con ``inner`` > 0, estrella de ``sides`` puntas)."""
+    cx, cy, rx, ry = rect.center().x(), rect.center().y(), rect.width() / 2, rect.height() / 2
+    pts = []
+    n = sides * 2 if inner else sides
+    for k in range(n):
+        a = -math.pi / 2 + k * 2 * math.pi / n
+        f = inner if (inner and k % 2) else 1.0
+        pts.append(QPointF(cx + rx * f * math.cos(a), cy + ry * f * math.sin(a)))
+    return QPolygonF(pts)
+
+
+def _draw_polygon(p, item, rect, color, w):
+    p.drawPolygon(_regular_polygon(rect, POLYGON_SIDES[item.tool]))
+
+
+def _draw_diamond(p, item, rect, color, w):
+    c = rect.center()
+    p.drawPolygon(QPolygonF([QPointF(c.x(), rect.top()), QPointF(rect.right(), c.y()),
+                             QPointF(c.x(), rect.bottom()), QPointF(rect.left(), c.y())]))
+
+
+def _draw_star(p, item, rect, color, w):
+    p.drawPolygon(_regular_polygon(rect, 5, inner=0.42))
+
+
+def _draw_rounded_rect(p, item, rect, color, w):
+    r = min(rect.width(), rect.height()) * 0.2
+    p.drawRoundedRect(rect, r, r)
+
+
+def _draw_double_arrow(p, item, rect, color, w):
+    a, b = QPointF(item.x1, item.y1), QPointF(item.x2, item.y2)
+    length = math.hypot(b.x() - a.x(), b.y() - a.y())
+    if length < 0.5:
+        return
+    head = min(arrow_head_length(w), length / 2)
+    if length > head * 1.2:
+        p.drawLine(_toward(a, b, head * 0.6), _toward(b, a, head * 0.6))
+    _arrow_head(p, b, a, head, color)
+    _arrow_head(p, a, b, head, color)
+
+
+def curved_control(item) -> QPointF:
+    """Punto de control de la flecha curva: se curva hacia la izquierda del sentido del trazo."""
+    mx, my = (item.x1 + item.x2) / 2, (item.y1 + item.y2) / 2
+    dx, dy = item.x2 - item.x1, item.y2 - item.y1
+    return QPointF(mx + dy * 0.35, my - dx * 0.35)
+
+
+def _draw_curved_arrow(p, item, rect, color, w):
+    a, b = QPointF(item.x1, item.y1), QPointF(item.x2, item.y2)
+    length = math.hypot(b.x() - a.x(), b.y() - a.y())
+    if length < 0.5:
+        return
+    ctrl = curved_control(item)
+    head = min(arrow_head_length(w), length * 0.6)
+    path = QPainterPath(a)
+    path.quadTo(ctrl, b)
+    # el trazo termina un poco antes de la punta para que no asome por ella
+    t_end = max(0.0, 1.0 - (head * 0.6) / max(path.length(), 1.0))
+    trimmed = QPainterPath(a)
+    steps = 48
+    for i in range(1, steps + 1):
+        trimmed.lineTo(path.pointAtPercent(t_end * i / steps))
+    p.save()
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawPath(trimmed)
+    p.restore()
+    # dirección de la punta: tangente al final de la curva
+    _arrow_head(p, path.pointAtPercent(max(0.0, 1.0 - head / max(path.length(), 1.0))), b, head, color)
+
+
+def _draw_axes(p, item, rect, color, w):
+    """Ejes de coordenadas: se cruzan en el centro del recuadro, con flechas, marcas y «x», «y»."""
+    if rect.width() < 4 or rect.height() < 4:
+        return
+    c = rect.center()
+    head = arrow_head_length(w)
+    p.drawLine(QPointF(rect.left(), c.y()), QPointF(rect.right() - head * 0.6, c.y()))
+    p.drawLine(QPointF(c.x(), rect.bottom()), QPointF(c.x(), rect.top() + head * 0.6))
+    _arrow_head(p, QPointF(rect.left(), c.y()), QPointF(rect.right(), c.y()), head, color)
+    _arrow_head(p, QPointF(c.x(), rect.bottom()), QPointF(c.x(), rect.top()), head, color)
+    step = max(18.0, w * 6)
+    tick = max(4.0, w * 1.6)
+    thin = QPen(p.pen())
+    thin.setWidthF(max(1.0, w * 0.6))
+    p.save()
+    p.setPen(thin)
+    k = 1
+    while c.x() + k * step < rect.right() - head * 1.5 or c.x() - k * step > rect.left() + 2:
+        for x in (c.x() + k * step, c.x() - k * step):
+            if rect.left() + 2 < x < rect.right() - head * 1.5:
+                p.drawLine(QPointF(x, c.y() - tick), QPointF(x, c.y() + tick))
+        k += 1
+    k = 1
+    while c.y() - k * step > rect.top() + head * 1.5 or c.y() + k * step < rect.bottom() - 2:
+        for y in (c.y() - k * step, c.y() + k * step):
+            if rect.top() + head * 1.5 < y < rect.bottom() - 2:
+                p.drawLine(QPointF(c.x() - tick, y), QPointF(c.x() + tick, y))
+        k += 1
+    f = QFont()
+    f.setFamilies(TEXT_FAMILIES)
+    f.setItalic(True)
+    f.setPixelSize(int(max(13, w * 5)))
+    p.setFont(f)
+    p.drawText(QPointF(rect.right() - f.pixelSize() * 0.7, c.y() + head + f.pixelSize()), "x")
+    p.drawText(QPointF(c.x() + head * 0.8, rect.top() + f.pixelSize()), "y")
+    p.restore()
+
+
+def _draw_brace(p, item, rect, color, w):
+    """Llave «{»: a lo largo del lado largo del recuadro; el pico apunta al lado donde empezó el arrastre."""
+    p.save()
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    vertical = rect.height() >= rect.width()
+    if vertical:
+        tip, back = (rect.left(), rect.right()) if item.x1 <= item.x2 else (rect.right(), rect.left())
+        a, b = rect.top(), rect.bottom()
+    else:
+        tip, back = (rect.top(), rect.bottom()) if item.y1 <= item.y2 else (rect.bottom(), rect.top())
+        a, b = rect.left(), rect.right()
+    mid = (tip + back) / 2
+    m = (a + b) / 2
+    r = min((b - a) / 4, abs(back - tip))
+
+    def pt(u, v):  # u: coordenada a lo largo de la llave; v: hacia el pico
+        return QPointF(v, u) if vertical else QPointF(u, v)
+
+    path = QPainterPath(pt(a, back))
+    path.quadTo(pt(a, mid), pt(a + r, mid))
+    path.lineTo(pt(m - r, mid))
+    path.quadTo(pt(m, mid), pt(m, tip))
+    path.quadTo(pt(m, mid), pt(m + r, mid))
+    path.lineTo(pt(b - r, mid))
+    path.quadTo(pt(b, mid), pt(b, back))
+    p.drawPath(path)
+    p.restore()
+
+
+EXTRA_DRAWERS = {
+    Tool.PENTAGON: _draw_polygon, Tool.HEXAGON: _draw_polygon, Tool.OCTAGON: _draw_polygon,
+    Tool.DIAMOND: _draw_diamond, Tool.STAR: _draw_star, Tool.ROUNDED_RECT: _draw_rounded_rect,
+    Tool.AXES: _draw_axes, Tool.DOUBLE_ARROW: _draw_double_arrow, Tool.CURVED_ARROW: _draw_curved_arrow,
+    Tool.BRACE: _draw_brace,
+}
 
 
 def shape_rect(item: ShapeItem) -> QRectF:
     m = item.size * 2 + 6
-    if item.tool == Tool.ARROW:
+    if item.tool in (Tool.ARROW, Tool.DOUBLE_ARROW, Tool.CURVED_ARROW, Tool.AXES):
         m += arrow_head_length(item.size)
-    return QRectF(QPointF(item.x1, item.y1), QPointF(item.x2, item.y2)).normalized().adjusted(-m, -m, m, m)
+    if item.tool == Tool.AXES:
+        m += max(13, item.size * 5) * 2  # rótulos «x» e «y»
+    rect = QRectF(QPointF(item.x1, item.y1), QPointF(item.x2, item.y2)).normalized()
+    if item.tool == Tool.CURVED_ARROW:
+        rect = rect.united(QRectF(curved_control(item), QSizeF(1, 1)))
+    return rect.adjusted(-m, -m, m, m)
 
 
 # --------------------------------------------------------------------------- texto
@@ -557,6 +727,52 @@ def text_index_at(item: TextItem, pos: QPointF) -> int:
     text = lines[line]
     col = min(range(len(text) + 1), key=lambda k: abs(fm.horizontalAdvance(text[:k]) - dx))
     return text_index(item.text, line, col)
+
+
+def erasers_after(items: list, index: int) -> list | None:
+    """Gomas aplicadas después del elemento ``index``; None si después hubo «Borrar todo»."""
+    later = items[index + 1:]
+    if any(isinstance(i, ClearItem) for i in later):
+        return None
+    return [i for i in later if is_eraser(i)]
+
+
+def apply_erasers(p: QPainter, erasers) -> None:
+    """Borra con las gomas indicadas lo pintado en ``p`` (DestinationOut)."""
+    if not erasers:
+        return
+    p.save()
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    p.setCompositionMode(QPainter.CompositionMode.CompositionMode_DestinationOut)
+    for e in erasers:
+        draw_item(p, e)
+    p.restore()
+
+
+def text_ink_near(item: TextItem, erasers, pos: QPointF, radius: float) -> bool:
+    """¿Queda tinta visible de este texto (tras las gomas) a menos de ``radius`` del punto?
+
+    Así un texto borrado con la goma deja de poder abrirse para editarlo, y en uno borrado a
+    medias solo cuenta la parte que todavía se ve.
+    """
+    if erasers is None:
+        return False
+    side = int(math.ceil(2 * radius)) + 2
+    img = QImage(side, side, QImage.Format.Format_ARGB32_Premultiplied)
+    img.fill(Qt.GlobalColor.transparent)
+    p = QPainter(img)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    p.translate(side / 2 - pos.x(), side / 2 - pos.y())
+    draw_text(p, replace(item, opacity=1.0))
+    apply_erasers(p, erasers)
+    p.end()
+    c = side / 2
+    r2 = radius * radius
+    for y in range(side):
+        for x in range(side):
+            if (x - c) ** 2 + (y - c) ** 2 <= r2 and img.pixelColor(x, y).alpha() > 40:
+                return True
+    return False
 
 
 def text_hit_rect(item: TextItem) -> QRectF:
@@ -692,6 +908,80 @@ def draw_pattern(p: QPainter, w: float, h: float, pattern: str, background: str)
 # --------------------------------------------------------------------------- genérico
 
 
+# --------------------------------------------------------------------------- sellos
+
+STAMP_COLORS = {
+    "check": QColor(46, 125, 50), "cross": QColor(198, 40, 40), "star": QColor(251, 192, 45),
+    "smiley": QColor(253, 216, 53), "question": QColor(30, 136, 229),
+}
+
+
+def _stamp_stroke(p: QPainter, path: QPainterPath, color: QColor, width: float) -> None:
+    """Trazo grueso con borde blanco, visible sobre fondos claros y oscuros."""
+    for col, w in ((QColor(255, 255, 255, 235), width * 1.55), (color, width)):
+        p.setPen(QPen(col, w, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawPath(path)
+
+
+def _badge(p: QPainter, c: QPointF, r: float, fill: QColor, text: str) -> None:
+    p.setPen(QPen(QColor(255, 255, 255), max(1.5, r * 0.12)))
+    p.setBrush(fill)
+    p.drawEllipse(c, r, r)
+    f = QFont()
+    f.setFamilies(TEXT_FAMILIES)
+    f.setBold(True)
+    f.setPixelSize(max(6, int(r * (1.15 if len(text) < 2 else 0.9 if len(text) < 3 else 0.7))))
+    p.setFont(f)
+    p.setPen(QColor(255, 255, 255))
+    p.drawText(QRectF(c.x() - r, c.y() - r, 2 * r, 2 * r), Qt.AlignmentFlag.AlignCenter, text)
+
+
+def draw_stamp(p: QPainter, item: StampItem) -> None:
+    s = max(4.0, item.size)
+    c = QPointF(item.x, item.y)
+    k = item.kind
+    p.save()
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    if k == "check":
+        path = QPainterPath(QPointF(c.x() - s * 0.36, c.y() + s * 0.02))
+        path.lineTo(c.x() - s * 0.1, c.y() + s * 0.28)
+        path.lineTo(c.x() + s * 0.4, c.y() - s * 0.3)
+        _stamp_stroke(p, path, STAMP_COLORS["check"], s * 0.14)
+    elif k == "cross":
+        d = s * 0.3
+        path = QPainterPath(QPointF(c.x() - d, c.y() - d))
+        path.lineTo(c.x() + d, c.y() + d)
+        path.moveTo(c.x() + d, c.y() - d)
+        path.lineTo(c.x() - d, c.y() + d)
+        _stamp_stroke(p, path, STAMP_COLORS["cross"], s * 0.14)
+    elif k == "star":
+        star = _regular_polygon(QRectF(c.x() - s / 2, c.y() - s / 2 + s * 0.03, s, s), 5, inner=0.45)
+        p.setPen(QPen(QColor(230, 81, 0), max(1.0, s * 0.045), Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap,
+                      Qt.PenJoinStyle.RoundJoin))
+        p.setBrush(STAMP_COLORS["star"])
+        p.drawPolygon(star)
+    elif k == "smiley":
+        r = s / 2
+        p.setPen(QPen(QColor(249, 168, 37), max(1.0, s * 0.045)))
+        p.setBrush(STAMP_COLORS["smiley"])
+        p.drawEllipse(c, r, r)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor(60, 45, 30))
+        for dx in (-0.17, 0.17):
+            p.drawEllipse(QPointF(c.x() + dx * s, c.y() - 0.1 * s), s * 0.055, s * 0.085)
+        smile = QPainterPath(QPointF(c.x() - 0.24 * s, c.y() + 0.08 * s))
+        smile.quadTo(QPointF(c.x(), c.y() + 0.38 * s), QPointF(c.x() + 0.24 * s, c.y() + 0.08 * s))
+        p.setPen(QPen(QColor(60, 45, 30), max(1.0, s * 0.055), Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawPath(smile)
+    elif k == "number":
+        _badge(p, c, s / 2, QColor(*item.rgba[:3]), item.label or "1")
+    elif k == "question":
+        _badge(p, c, s / 2, STAMP_COLORS["question"], "?")
+    p.restore()
+
+
 def draw_item(p: QPainter, item) -> None:
     if isinstance(item, StrokeItem):
         draw_stroke(p, item)
@@ -699,6 +989,11 @@ def draw_item(p: QPainter, item) -> None:
         draw_shape(p, item)
     elif isinstance(item, TextItem):
         draw_text(p, item)
+    elif isinstance(item, StampItem):
+        draw_stamp(p, item)
+    elif isinstance(item, GroupItem):
+        for sub in item.items:
+            draw_item(p, sub)
 
 
 def item_rect(item) -> QRectF:
@@ -708,6 +1003,14 @@ def item_rect(item) -> QRectF:
         return shape_rect(item)
     if isinstance(item, TextItem):
         return text_box(item).adjusted(-4, -4, item.size + 8, 6)
+    if isinstance(item, StampItem):
+        r = item.size * 0.62 + 4
+        return QRectF(item.x - r, item.y - r, 2 * r, 2 * r)
+    if isinstance(item, GroupItem):
+        rect = QRectF()
+        for sub in item.items:
+            rect = rect.united(item_rect(sub))
+        return rect
     return QRectF()
 
 
@@ -724,6 +1027,10 @@ def apply_item_to_canvas(canvas: QImage, layer: QImage, item) -> None:
     """
     if isinstance(item, ClearItem):
         canvas.fill(Qt.GlobalColor.transparent)
+        return
+    if isinstance(item, GroupItem):  # cada elemento con su propia opacidad
+        for sub in item.items:
+            apply_item_to_canvas(canvas, layer, sub)
         return
     if is_eraser(item):
         p = QPainter(canvas)

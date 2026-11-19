@@ -11,7 +11,9 @@ from PySide6.QtCore import QMarginsF, QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QImage, QPageLayout, QPageSize, QPainter, QPdfWriter
 
 from . import __version__, render
-from .items import ClearItem, ShapeItem, StrokeItem, TextEditItem, TextItem, resolve_items
+from .items import (
+    ClearItem, GroupItem, ShapeItem, StampItem, StrokeItem, TextEditItem, TextItem, resolve_items,
+)
 from .tools import BACKGROUNDS, PATTERNS, BrushType, Tool
 
 FILE_EXTENSION = ".pizarra"
@@ -50,6 +52,11 @@ def item_to_dict(item) -> dict:
     if isinstance(item, TextItem):
         return {"type": "text", "rgba": list(item.rgba), "size": item.size, "opacity": item.opacity,
                 "x": item.x, "y": item.y, "text": item.text, "bold": item.bold, "uid": item.uid}
+    if isinstance(item, StampItem):
+        return {"type": "stamp", "kind": item.kind, "rgba": list(item.rgba), "size": item.size,
+                "opacity": item.opacity, "x": item.x, "y": item.y, "label": item.label}
+    if isinstance(item, GroupItem):
+        return {"type": "group", "items": [item_to_dict(i) for i in item.items]}
     if isinstance(item, TextEditItem):
         return {"type": "text_edit", "uid": item.uid, "text": item_to_dict(item.text)}
     if isinstance(item, ClearItem):
@@ -72,6 +79,11 @@ def item_from_dict(d: dict):
         if d.get("uid"):  # las sesiones de la 1.2.0/1.2.1 no lo tienen: se genera uno nuevo
             item.uid = str(d["uid"])
         return item
+    if t == "stamp":
+        return StampItem(str(d["kind"]), tuple(d["rgba"]), float(d["size"]), float(d["opacity"]),
+                         float(d["x"]), float(d["y"]), str(d.get("label", "")))
+    if t == "group":
+        return GroupItem([item_from_dict(i) for i in d.get("items", [])])
     if t == "text_edit":
         text = item_from_dict(d["text"])
         text.uid = str(d["uid"])

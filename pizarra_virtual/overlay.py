@@ -135,6 +135,7 @@ class Overlay(QWidget):
         self._caret = 0  # posición del cursor dentro del texto en edición
         self._edit_uid: str | None = None  # uid del texto ya escrito que se está editando
         self._edit_orig: TextItem | None = None
+        self._edit_erasers: list = []
         self._text_drag: tuple[QPointF, float, float] | None = None  # (inicio, x, y) al arrastrar un texto
         self._state: render.StrokeState | None = None
         self._tablet_active = False
@@ -646,6 +647,14 @@ class Overlay(QWidget):
         size = float(c.size_for(tool))
         opacity = c.opacity_for(tool) / 100.0
         rgba = c.color.getRgb()
+        if tool == Tool.STAMP:
+            item = c.make_stamp(pos.x(), pos.y())
+            self.apply_item(item, update=False)
+            c.push(self.key, item)
+            self.update(self._view_rect(render.item_rect(item)))
+            if item.kind == "number":
+                c.refresh_cursor(self)  # el cursor pasa a mostrar el número siguiente
+            return
         if tool in SHAPE_TOOLS:
             self._shape = ShapeItem(tool, rgba, size, opacity, pos.x(), pos.y(), pos.x(), pos.y(),
                                     filled=c.fill_shapes)
@@ -853,9 +862,17 @@ class Overlay(QWidget):
         return self._text
 
     def text_at(self, pos: QPointF) -> TextItem | None:
-        """El texto ya escrito (el de más arriba) que hay bajo un punto, o None."""
-        for item in reversed(self.ctrl.items_for(self.key)):
-            if isinstance(item, TextItem) and render.text_hit_rect(item).contains(pos):
+        """El texto ya escrito (el de más arriba) cuya tinta visible está bajo un punto, o None.
+
+        Solo cuenta lo que se ve: un texto borrado con la goma o con «Borrar todo» no se abre.
+        """
+        items = self.ctrl.items_for(self.key)
+        for idx in range(len(items) - 1, -1, -1):
+            item = items[idx]
+            if not isinstance(item, TextItem) or not render.text_hit_rect(item).contains(pos):
+                continue
+            radius = max(6.0, item.size * 0.35)
+            if render.text_ink_near(item, render.erasers_after(items, idx), pos, radius):
                 return item
         return None
 
@@ -864,6 +881,10 @@ class Overlay(QWidget):
         c = self.ctrl
         self._edit_uid = item.uid
         self._edit_orig = item
+        items = self.ctrl.items_for(self.key)
+        idx = next(i for i, it in enumerate(items) if isinstance(it, TextItem) and it.uid == item.uid)
+        # La vista previa respeta la goma aplicada después (lo borrado sigue borrado al editar).
+        self._edit_erasers = render.erasers_after(items, idx) or []
         self._text = dataclasses.replace(item)
         self._caret = render.text_index_at(self._text, pos)
         self._text_drag = (QPointF(pos), item.x, item.y)
@@ -880,6 +901,8 @@ class Overlay(QWidget):
         self._clear_layer()
         p = self._painter(self.layer)
         render.draw_text(p, self._text)
+        if self._edit_uid is not None:
+            render.apply_erasers(p, self._edit_erasers)
         p.end()
         self._layer_rect = render.item_rect(self._text)
         self.update(self._view_rect(old.united(self._layer_rect)))
@@ -1088,9 +1111,23 @@ class Overlay(QWidget):
 # ---------------------------------------------------------------------- cursores
 
 
+def make_stamp_cursor(stamp, view_size: float, dpr: float) -> QCursor:
+    """Cursor con la vista previa del sello (semitransparente), centrado en el punto del clic."""
+    d = max(12.0, min(float(view_size), 200.0))
+    side = int(math.ceil(d * 1.3)) | 1
+    pm = QPixmap(max(1, int(math.ceil(side * dpr))), max(1, int(math.ceil(side * dpr))))
+    pm.setDevicePixelRatio(dpr)
+    pm.fill(_TRANSPARENT)
+    p = QPainter(pm)
+    p.setOpacity(0.6)
+    render.draw_stamp(p, dataclasses.replace(stamp, size=d, x=side / 2, y=side / 2))
+    p.end()
+    return QCursor(pm, side // 2, side // 2)
+
+
 def make_tool_cursor(tool: Tool, size: float, dpr: float) -> QCursor:
     """Cursor que muestra el tamaño real del pincel / goma (``size`` ya en píxeles de la vista)."""
-    if tool in SHAPE_TOOLS:
+    if tool in SHAPE_TOOLS or tool == Tool.STAMP:
         return QCursor(Qt.CursorShape.CrossCursor)
     if tool == Tool.TEXT:
         return QCursor(Qt.CursorShape.IBeamCursor)

@@ -7,17 +7,21 @@ import logging
 import os
 import sys
 
-from PySide6.QtCore import QEvent, QObject, QPointF, QSettings, QStandardPaths, Qt, QTimer, Signal
+from PySide6.QtCore import QEvent, QObject, QPointF, QRectF, QSettings, QStandardPaths, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QColor, QCursor, QGuiApplication
 from PySide6.QtWidgets import QApplication, QFileDialog, QMenu, QMessageBox, QSystemTrayIcon
 
 from . import __version__, capture, icons, session, winutil
 from .hotkeys import MOD_ALT, MOD_CONTROL, MOD_SHIFT, GlobalHotkeys
-from .items import ClearItem, TextEditItem
-from .overlay import Overlay, make_tool_cursor, now_ms
+from . import templates
+from .items import ClearItem, StampItem, TextEditItem, flatten
+from .overlay import Overlay, make_stamp_cursor, make_tool_cursor, now_ms
 from .session import Page
 from .toolbar import Toolbar
-from .tools import BACKGROUNDS, BRUSH_LABELS, DEFAULT_COLOR, PATTERNS, TOOL_SPECS, BrushType, Tool
+from .tools import (
+    BACKGROUNDS, BRUSH_LABELS, DEFAULT_COLOR, EXTRA_SHAPES, PATTERNS, POLYGON_SIDES, STAMPS, TOOL_SPECS, BrushType,
+    Tool,
+)
 
 log = logging.getLogger(__name__)
 
@@ -78,6 +82,8 @@ class Controller(QObject):
         self.opacities = {t: s.default_opacity for t, s in TOOL_SPECS.items()}
         self.fill_shapes = False
         self.text_bold = False
+        self.stamp_kind = "check"
+        self.extra_shape = Tool.HEXAGON  # última figura elegida en «Más figuras»
         self.spotlight_radius = SPOTLIGHT_DEFAULT
         self.spotlight_shape = "circle"  # "circle" o "rect" (franja, p. ej. para leer línea a línea)
         self._load_settings()
@@ -251,12 +257,70 @@ class Controller(QObject):
 
     def set_tool(self, tool: Tool) -> None:
         tool = Tool(tool)
+        if tool in EXTRA_SHAPES:
+            self.extra_shape = tool
         if tool != Tool.TEXT:
             self._finish_all()
         self.tool = tool
         if not self.drawing:
             self.set_drawing(True)
         self._changed(cursor=True, repaint=True)
+
+    def set_stamp_kind(self, kind: str) -> None:
+        if kind in STAMPS:
+            self.stamp_kind = kind
+            self.set_tool(Tool.STAMP)
+            self._changed(cursor=True)
+
+    def cycle_stamp(self) -> None:
+        """Tecla S: elige la herramienta Sellos; si ya está elegida, pasa al siguiente sello."""
+        if self.tool != Tool.STAMP:
+            self.set_tool(Tool.STAMP)
+            return
+        order = list(STAMPS)
+        self.set_stamp_kind(order[(order.index(self.stamp_kind) + 1) % len(order)])
+
+    def cycle_polygon(self) -> None:
+        """Tecla P: pentágono → hexágono → octágono."""
+        order = list(POLYGON_SIDES)
+        if self.tool in order:
+            self.set_tool(order[(order.index(self.tool) + 1) % len(order)])
+        else:
+            self.set_tool(self.extra_shape if self.extra_shape in order else Tool.HEXAGON)
+
+    def next_stamp_number(self) -> int:
+        """Siguiente número para el sello «número» en la página (sigue la cuenta tras deshacer)."""
+        items = flatten([item for _, item in self.history])
+        nums = [int(i.label) for i in items if isinstance(i, StampItem) and i.kind == "number" and i.label.isdigit()]
+        return max(nums, default=0) + 1
+
+    def make_stamp(self, x: float, y: float) -> StampItem:
+        label = str(self.next_stamp_number()) if self.stamp_kind == "number" else ""
+        return StampItem(self.stamp_kind, self.color.getRgb(), float(self.sizes[Tool.STAMP]),
+                         self.opacities[Tool.STAMP] / 100.0, x, y, label)
+
+    def insert_template(self, key: str) -> None:
+        """Inserta una plantilla centrada en la pantalla donde está el cursor (un solo paso de deshacer)."""
+        if key not in templates.TEMPLATES:
+            return
+        self._finish_all()
+        if not self.visible:
+            self._set_visible(True)
+        ov = self.overlay_for_screen(self.current_screen()) or next(iter(self.overlays.values()), None)
+        if ov is None:
+            return
+        if ov.zoom_active:
+            ov.end_zoom()
+        w, h = ov.width(), ov.height()
+        area = QRectF(w * 0.08, h * 0.1, w * 0.84, h * 0.8)
+        line = max(2.0, min(6.0, float(self.sizes[Tool.RECT])))
+        group = templates.build(key, area, self.color.getRgb(), line)
+        self.push(ov.key, group)
+        ov.apply_item(group)
+        # Lista para escribir: con Texto, un clic sobre cualquier rótulo lo edita.
+        self.set_tool(Tool.TEXT)
+        self.notify("Plantilla insertada", templates.TEMPLATES[key][0] + ". Haz clic en un texto para cambiarlo; "
+                    "Ctrl+Z la quita.")
 
     def set_brush_type(self, bt: BrushType) -> None:
         self.brush_type = BrushType(bt)
@@ -359,7 +423,10 @@ class Controller(QObject):
     def refresh_cursor(self, ov: Overlay) -> None:
         if self.drawing:
             size = self.sizes[self.tool] * ov.zoom_factor  # con zoom el trazo se ve más grande
-            ov.setCursor(make_tool_cursor(self.tool, size, ov.devicePixelRatioF() or 1.0))
+            if self.tool == Tool.STAMP:
+                ov.setCursor(make_stamp_cursor(self.make_stamp(0, 0), size, ov.devicePixelRatioF() or 1.0))
+            else:
+                ov.setCursor(make_tool_cursor(self.tool, size, ov.devicePixelRatioF() or 1.0))
         else:
             ov.unsetCursor()
 
@@ -647,6 +714,8 @@ class Controller(QObject):
         self.redo_stack.append((key, item))
         self.dirty = True
         self._rebuild(key)
+        if self.tool == Tool.STAMP:  # el cursor muestra el siguiente número
+            self._changed(cursor=True)
 
     def redo(self) -> None:
         self._finish_all()
@@ -655,6 +724,8 @@ class Controller(QObject):
         key, item = self.redo_stack.pop()
         self.history.append((key, item))
         self.dirty = True
+        if self.tool == Tool.STAMP:
+            self._changed(cursor=True)
         if isinstance(item, TextEditItem):  # sustituye a un texto anterior: hay que redibujar
             self._rebuild(key)
             return
@@ -1021,6 +1092,11 @@ class Controller(QObject):
                             store[Tool(k)] = max(lo, min(hi, int(v)))
             self.fill_shapes = str(s.value("fill", "false")).lower() == "true"
             self.text_bold = str(s.value("text_bold", "false")).lower() == "true"
+            kind = str(s.value("stamp_kind", "check"))
+            self.stamp_kind = kind if kind in STAMPS else "check"
+            extra = str(s.value("extra_shape", Tool.HEXAGON.value))
+            self.extra_shape = Tool(extra) if extra in Tool._value2member_map_ and Tool(extra) in EXTRA_SHAPES \
+                else Tool.HEXAGON
             bg = str(s.value("background", "transparent"))
             self.page.background = bg if bg in BACKGROUNDS else "transparent"
             pat = str(s.value("pattern", "none"))
@@ -1041,6 +1117,8 @@ class Controller(QObject):
         s.setValue("opacities", json.dumps({t.value: v for t, v in self.opacities.items()}))
         s.setValue("fill", "true" if self.fill_shapes else "false")
         s.setValue("text_bold", "true" if self.text_bold else "false")
+        s.setValue("stamp_kind", self.stamp_kind)
+        s.setValue("extra_shape", self.extra_shape.value)
         s.setValue("background", self.background)
         s.setValue("pattern", self.pattern)
         s.setValue("spotlight_radius", self.spotlight_radius)
@@ -1065,6 +1143,9 @@ El <b>Manual de usuario</b> (PDF) explica todas las funciones.</p>
 <tr><td><b>1</b> … <b>5</b></td><td>Pincel, Lápiz, Pluma, Destacador, Goma</td></tr>
 <tr><td><b>6</b> … <b>0</b></td><td>Rectángulo, Elipse, Triángulo, Línea, Flecha</td></tr>
 <tr><td><b>T</b> / <b>L</b></td><td>Texto / Puntero láser con tinta temporal</td></tr>
+<tr><td><b>P</b> · <b>D</b> · <b>E</b> · <b>Q</b></td><td>Polígonos · Rombo · Estrella · Rectángulo redondeado</td></tr>
+<tr><td><b>J</b> · <b>W</b> · <b>U</b> · <b>K</b></td><td>Ejes · Flecha doble · Flecha curva · Llave</td></tr>
+<tr><td><b>S</b></td><td>Sellos (otra vez S: siguiente sello) · Plantillas: botón de la barra</td></tr>
 <tr><td><b>B</b> · <b>R</b> · <b>C</b></td><td>Tipo de pincel · Relleno de figuras · Color</td></tr>
 <tr><td><b>+ / -</b> o rueda</td><td>Grosor (tamaño de letra con Texto)</td></tr>
 <tr><td><b>Mayús + rueda</b></td><td>Opacidad</td></tr>

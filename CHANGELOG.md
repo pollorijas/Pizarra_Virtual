@@ -9,6 +9,30 @@ incompatibles.
 Cada versión publicada debe tener su sección aquí: el flujo de publicación de GitHub Actions se
 detiene si falta.
 
+## [1.3.0] - 2026-11-19
+
+### Añadido
+- **Plantillas** (botón «Plantillas»): mapa conceptual, línea de tiempo, diagramas de Venn de 2 y 3
+  conjuntos, tabla de dos columnas, tabla S-Q-A (sé / quiero saber / aprendí), esquema de redacción,
+  ciclo de 4 etapas y causa y efecto. Se insertan centradas en la pantalla con el color actual, se
+  quitan de una vez con Ctrl+Z y cada rótulo se edita con un clic (la herramienta Texto queda activa).
+- **Sellos** (tecla S o botón «Sellos»): ✔ correcto, ✘ incorrecto, estrella, carita feliz, números
+  (1, 2, 3… que siguen la cuenta en la página y retroceden al deshacer) e interrogación. Un clic
+  pone el sello y el cursor muestra una vista previa.
+- **Más figuras** (botón «Más figuras»): pentágono, hexágono y octágono (P), rombo (D), estrella (E),
+  rectángulo redondeado (Q), ejes de coordenadas (J), flecha doble (W), flecha curva (U) y llave (K).
+  Las cerradas se pueden rellenar.
+
+### Corregido
+- **Un texto borrado con la goma se podía volver a abrir.** Al hacer clic donde había estado, el texto
+  invisible se abría para editarlo. Ahora un texto solo se abre donde todavía se ve su tinta: si se
+  borró con la goma o con «Borrar todo», el clic empieza un texto nuevo; si se borró a medias, se abre
+  desde la parte visible y lo borrado sigue borrado mientras se edita.
+
+### Cambiado
+- La barra de herramientas tiene una fila más con los botones «Más figuras», «Sellos» y «Plantillas».
+- Las sesiones `.pizarra` guardan sellos y plantillas; las de versiones anteriores se abren igual.
+
 ## [1.2.2] - 2026-11-18
 
 ### Añadido
@@ -87,5 +111,6 @@ detiene si falta.
   colores, grosor y opacidad, deshacer/rehacer, capturas con y sin dibujo, atajos globales, modo
   «Ratón libre», varios monitores y escalado de pantalla (DPI).
 
+[1.3.0]: https://github.com/pollorijas/Pizarra_Virtual/releases/tag/v1.3.0
 [1.2.2]: https://github.com/pollorijas/Pizarra_Virtual/releases/tag/v1.2.2
 [1.2.1]: https://github.com/pollorijas/Pizarra_Virtual/releases/tag/v1.2.1
