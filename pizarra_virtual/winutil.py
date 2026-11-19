@@ -88,12 +88,20 @@ def pressed_keys(vks) -> set[int]:
     return {vk for vk in vks if state(vk) & 0x8000}
 
 
+NID_INTEGRATED_TOUCH, NID_EXTERNAL_TOUCH = 0x01, 0x02
+
+
+def digitizer_has_touch(value: int) -> bool:
+    """¿El valor de SM_DIGITIZER indica entrada táctil? (no basta un lápiz: NID_*_PEN, NID_READY)."""
+    return bool(value & (NID_INTEGRATED_TOUCH | NID_EXTERNAL_TOUCH))
+
+
 def has_touch_screen() -> bool:
     """¿Hay una pantalla táctil conectada? (SM_DIGITIZER indica entrada táctil integrada o externa)."""
     if not IS_WINDOWS:
         return False
     try:
-        return bool(_user32.GetSystemMetrics(94) & 0xC0)  # NID_INTEGRATED_TOUCH | NID_EXTERNAL_TOUCH
+        return digitizer_has_touch(_user32.GetSystemMetrics(94))
     except Exception:  # pragma: no cover
         return False
 

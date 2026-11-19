@@ -18,6 +18,7 @@ log = logging.getLogger(__name__)
 
 WM_POINTERUPDATE = 0x0245
 WM_POINTERDOWN = 0x0246
+WM_POINTERUP = 0x0247
 PT_TOUCH = 2
 TOUCH_MASK_CONTACTAREA = 0x1
 RECENT_S = 0.5  # el dato vale para el toque que empieza ahora (no para uno antiguo)
@@ -48,36 +49,72 @@ if IS_WINDOWS:
 
 
 class TouchContacts(QAbstractNativeEventFilter):
+    """Guarda el tamaño de cada toque activo (por identificador de puntero de Windows)."""
+
     def __init__(self):
         super().__init__()
-        self.size = 0.0  # ancho del último contacto (píxeles físicos)
-        self.when = 0.0
+        self.sizes: dict[int, float] = {}  # pid -> ancho del contacto (píxeles físicos)
+        self.when = 0.0  # cuándo cambió por última vez
         self.downs = 0  # toques vistos (diagnóstico)
         self.error = ""
 
+    @property
+    def size(self) -> float:
+        return max(self.sizes.values(), default=0.0)
+
+    def down(self, pid: int, size: float) -> None:
+        self.downs += pid not in self.sizes
+        self.sizes[pid] = size
+        self.when = time.monotonic()
+
+    def update(self, pid: int, size: float) -> None:
+        if pid in self.sizes:
+            self.sizes[pid] = size
+            self.when = time.monotonic()
+
+    def up(self, pid: int) -> None:
+        self.sizes.pop(pid, None)
+
     def recent_size(self) -> float:
-        return self.size if time.monotonic() - self.when <= RECENT_S else 0.0
+        """Tamaño del toque, solo si hay UN único contacto: con varios no se sabe cuál es cuál
+        (p. ej. un dedo que escribe y la mano que se apoya después) y no se adivina."""
+        if len(self.sizes) != 1 or time.monotonic() - self.when > RECENT_S:
+            return 0.0
+        return next(iter(self.sizes.values()))
+
+    def _prune(self) -> None:
+        """Olvida punteros que ya no existen (por si se perdió su WM_POINTERUP)."""
+        kind = ctypes.c_uint32()
+        for pid in list(self.sizes):
+            if not _user32.GetPointerType(pid, ctypes.byref(kind)):
+                self.sizes.pop(pid, None)
 
     def nativeEventFilter(self, event_type, message):  # noqa: N802 (API de Qt)
         try:
             et = bytes(event_type.data()) if hasattr(event_type, "data") else bytes(event_type)
             if et == b"windows_generic_MSG":
                 msg = wintypes.MSG.from_address(int(message))
-                if msg.message in (WM_POINTERDOWN, WM_POINTERUPDATE):
-                    self.downs += msg.message == WM_POINTERDOWN
+                if msg.message in (WM_POINTERDOWN, WM_POINTERUPDATE, WM_POINTERUP):
                     pid = int(msg.wParam) & 0xFFFF
+                    if msg.message == WM_POINTERUP:
+                        self.up(pid)
+                        return False, 0
                     kind = ctypes.c_uint32()
-                    if _user32.GetPointerType(pid, ctypes.byref(kind)) and kind.value == PT_TOUCH:
-                        info = _POINTER_TOUCH_INFO()
-                        if _user32.GetPointerTouchInfo(pid, ctypes.byref(info)) \
-                                and info.touchMask & TOUCH_MASK_CONTACTAREA:
-                            r = info.rcContact
-                            self.size = float(max(r.right - r.left, r.bottom - r.top))
-                            self.when = time.monotonic()
-                        else:
-                            self.error = f"GetPointerTouchInfo: {ctypes.GetLastError()} mask={info.touchMask}"
+                    if not (_user32.GetPointerType(pid, ctypes.byref(kind)) and kind.value == PT_TOUCH):
+                        return False, 0
+                    info = _POINTER_TOUCH_INFO()
+                    size = 0.0
+                    if _user32.GetPointerTouchInfo(pid, ctypes.byref(info)) \
+                            and info.touchMask & TOUCH_MASK_CONTACTAREA:
+                        r = info.rcContact
+                        size = float(max(r.right - r.left, r.bottom - r.top))
                     else:
-                        self.error = f"tipo {kind.value}"
+                        self.error = f"GetPointerTouchInfo: {ctypes.GetLastError()} mask={info.touchMask}"
+                    if msg.message == WM_POINTERDOWN:
+                        self._prune()
+                        self.down(pid, size)
+                    else:
+                        self.update(pid, size)
         except Exception:  # pragma: no cover
             log.exception("Error leyendo el contacto táctil")
         return False, 0

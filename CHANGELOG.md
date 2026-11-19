@@ -9,6 +9,27 @@ incompatibles.
 Cada versión publicada debe tener su sección aquí: el flujo de publicación de GitHub Actions se
 detiene si falta.
 
+## [1.5.1] - 2026-11-19
+
+### Corregido
+- **Modo táctil al primer inicio**: se activaba solo en equipos con una tableta de lápiz (por
+  ejemplo, Wacom) aunque no tuvieran pantalla táctil, porque se consultaba un dato equivocado de
+  Windows. Ahora solo se activa si hay una pantalla táctil de verdad.
+- **Tamaño de la goma tras usar la palma**: si un segundo dedo tocaba la pantalla justo después de
+  apoyar la palma (o Windows cancelaba el toque), la goma quedaba con el tamaño de la palma (hasta
+  250 px) y se guardaba así. Ahora siempre vuelve a su tamaño al terminar el toque.
+- **Recortar zona y «Ratón libre»**: si se pasaba a «Ratón libre» (Ctrl+Alt+D) o se ocultaba la
+  pizarra (Ctrl+Alt+H) en medio de un recorte, la pantalla congelada seguía encima mientras los
+  clics llegaban a los programas de debajo. Ahora el recorte se cancela.
+- **Apoyar la mano al escribir con el dedo**: si el canto de la mano tocaba la pantalla poco
+  después de empezar a escribir, el trazo podía convertirse en goma. Ahora el tamaño del contacto
+  se mira por cada toque y solo cuenta cuando hay uno solo.
+- **Clics ignorados después de un toque**: durante un segundo después de usar el dedo se ignoraban
+  los clics simulados por Windows; ahora solo el que corresponde a ese mismo toque.
+- **Mostrar teclas**: al activarlo con Ctrl+Alt+K ya no aparece en pantalla su propio atajo.
+- **Modo táctil**: al activarlo o desactivarlo, durante un instante un atajo de teclado podía
+  ejecutarse dos veces (en la barra anterior y en la nueva).
+
 ## [1.5.0] - 2026-11-19
 
 ### Añadido

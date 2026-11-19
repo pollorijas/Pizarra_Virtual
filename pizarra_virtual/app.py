@@ -584,6 +584,8 @@ class Controller(QObject):
             self._raise_toolbar()
 
     def toggle_visible(self) -> None:
+        if self.crop_active:
+            self.abort_crop()
         if self.visible:
             for ov in self.overlays.values():
                 ov.end_zoom()
@@ -737,6 +739,8 @@ class Controller(QObject):
         old = self.toolbar
         visible = old.isVisible()
         old.save_position()
+        for sc in old._shortcuts:  # sus atajos dejan de responder ya, no cuando se destruya
+            sc.setEnabled(False)
         self.state_changed.disconnect(old.sync)
         old.hide()
         old.deleteLater()  # (sin close(): cerrar la barra cerraría el programa)
@@ -752,6 +756,8 @@ class Controller(QObject):
         """Mostrar en pantalla los atajos y teclas especiales que se pulsan (Ctrl + C, Alt + Tab…)."""
         self.show_keys = not self.show_keys
         self._key_watcher.reset()
+        # Las teclas que ya están pulsadas (p. ej. el propio Ctrl+Alt+K) no se muestran
+        self._key_watcher.update(self.key_state())
         if not self.show_keys:
             for ov in self.overlays.values():
                 ov.clear_keys()
@@ -935,6 +941,13 @@ class Controller(QObject):
         ov.start_crop(shot)
         self._raise_toolbar(activate=True)  # Esc (en la barra) cancela el recorte
         self._changed()
+
+    def abort_crop(self) -> None:
+        """Quita el recorte sin restaurar el modo anterior (se está cambiando de modo)."""
+        self._crop = None
+        for ov in self.overlays.values():
+            ov.end_crop()
+        self._changed(cursor=True)
 
     def cancel_crop(self) -> None:
         for ov in self.overlays.values():

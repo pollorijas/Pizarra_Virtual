@@ -53,6 +53,7 @@ TOUCH_SLOP = 24         # px: más movimiento ya no es un «toque»
 TOUCH_TAP_MS = 500      # duración máxima de un toque con dos o tres dedos
 PALM_SIZE = 70          # px: un contacto más ancho es la palma (o el canto de la mano) → goma
 PALM_LATE_MS = 300      # hasta cuándo se acepta que el tamaño de la palma llegue tarde
+TOUCH_MOUSE_ECHO_MS = 400  # el ratón que Windows simula de un toque llega justo después de él
 
 ZOOM_DEFAULT = 2.0
 ZOOM_MIN = 1.0
@@ -292,6 +293,8 @@ class Overlay(QWidget):
         if passthrough:
             self.finish_current()
             self.end_zoom()
+            if self.crop_active:  # en «Ratón libre» no puede quedar la pantalla congelada encima
+                self.ctrl.abort_crop()
         self.ctrl.refresh_cursor(self)
         self.update()
 
@@ -1534,7 +1537,7 @@ class Overlay(QWidget):
         """Ratón que Windows o Qt simulan a partir de un toque ya atendido como toque: se ignora
         (si no, al levantar el dedo quedaría un punto suelto con la herramienta actual)."""
         return (e.source() != Qt.MouseEventSource.MouseEventNotSynthesized
-                and now_ms() - self._last_touch_ms < 1000)
+                and now_ms() - self._last_touch_ms < TOUCH_MOUSE_ECHO_MS)
 
     def mousePressEvent(self, e):  # noqa: N802
         if self._tablet_active or self._touch_active or self._mouse_from_touch(e):
@@ -1653,6 +1656,8 @@ class Overlay(QWidget):
         if t == QEvent.Type.TouchCancel:
             if g is not None and g["mode"] == "one":
                 self._abort_for_gesture()
+            if g is not None:
+                self._restore_palm(g)
             self._touch = None
             self._touch_active = False
             ev.accept()
@@ -1687,6 +1692,7 @@ class Overlay(QWidget):
             elif len(ev.points()) >= 2 and g["primary"] is not None:
                 if now - g["t0"] <= TOUCH_MULTI_MS and g["moved"] < TOUCH_SLOP:
                     self._abort_for_gesture()
+                    self._restore_palm(g)  # (la goma de la palma se descartó: era un gesto)
                     g["mode"] = "multi"
                 # (si llega tarde, el segundo dedo se ignora y se sigue dibujando con el primero)
             elif len(ev.points()) >= 2:  # varios dedos a la vez desde el principio
@@ -1717,7 +1723,7 @@ class Overlay(QWidget):
                     self.ctrl.redo()  # toque con tres dedos: rehacer
             elif g["mode"] == "one" and g["primary"] not in (None, -1):
                 self._pointer_release(g["cur"].get(g["primary"], QPointF()), now, mods)
-                self._restore_palm(g)
+            self._restore_palm(g)  # la goma vuelve siempre a su tamaño al terminar
             self._touch = None
             self._touch_active = False
         ev.accept()
