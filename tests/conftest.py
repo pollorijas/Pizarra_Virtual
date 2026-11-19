@@ -34,3 +34,16 @@ def ctrl(qapp, tmp_path, monkeypatch):
     yield c
     c.shutdown()
     qapp.processEvents()
+
+
+@pytest.fixture(autouse=True)
+def _clean_clipboard(qapp):
+    """Vacía el portapapeles al terminar cada prueba.
+
+    Si al salir de Python queda en el portapapeles un QMimeData puesto con setMimeData, PySide
+    se cierra con una violación de segmento (la aplicación nunca lo hace: solo lee el portapapeles).
+    """
+    yield
+    from PySide6.QtGui import QGuiApplication
+
+    QGuiApplication.clipboard().clear()

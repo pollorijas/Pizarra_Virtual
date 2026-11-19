@@ -9,6 +9,40 @@ incompatibles.
 Cada versión publicada debe tener su sección aquí: el flujo de publicación de GitHub Actions se
 detiene si falta.
 
+## [1.4.0] - 2026-11-19
+
+### Añadido
+- **Seleccionar y mover** (tecla A o botón de la flecha con recuadro):
+  - Selección: un clic sobre un trazo, figura, texto, sello o imagen lo selecciona; arrastrar en un
+    espacio vacío dibuja un lazo; Ctrl+A selecciona todo lo visible.
+  - Mover y cambiar de tamaño: arrastrar la selección la mueve (con Mayús, solo en horizontal o
+    vertical) y el asa de la esquina cambia su tamaño.
+  - Atajos: Supr elimina lo seleccionado, Ctrl+D lo duplica y Esc quita la selección.
+  - Lo movido queda delante y conserva las partes borradas con la goma. Todo se puede deshacer y
+    se guarda en la sesión.
+- **Pegar imágenes y textos** (Ctrl+V o botón «Pegar»):
+  - Una imagen copiada, o un archivo de imagen copiado en el Explorador, aparece centrada en el
+    cursor, con un tamaño máximo de media pantalla, y queda seleccionada para moverla o
+    agrandarla. Se guarda en la sesión y sale en el PDF.
+  - Un texto copiado se pega como texto.
+- **Formas perfectas** (reconocimiento de formas): opción que se activa o desactiva con el botón
+  «Formas perfectas» (con pincel, lápiz o pluma) o la tecla G. Viene **desactivada**. Al soltar el
+  trazo, las rectas, círculos, elipses, rectángulos, triángulos y polígonos de hasta seis lados
+  dibujados a mano se convierten en figuras exactas; lo demás queda tal cual.
+- **Temporizador** (botón del cronómetro): cuenta regresiva de 1 a 30 minutos, otro tiempo o
+  cronómetro.
+  - Una ventanita siempre encima, que se puede arrastrar, con pausa, ±1 minuto, volver a empezar
+    y una barra de progreso.
+  - Al terminar se pone en rojo con «¡Tiempo!» y suena un aviso.
+  - No aparece en las capturas ni dentro del zoom.
+
+### Cambiado
+- Supr borra solo lo seleccionado cuando hay una selección; si no, borra la página como antes.
+- Esc quita primero la selección y, después, pasa a «Ratón libre» como antes.
+- Las sesiones `.pizarra` guardan un identificador por elemento, las imágenes y los pasos de
+  mover, duplicar y eliminar. Las sesiones de versiones anteriores se siguen abriendo.
+- El flujo de compilación usa las versiones actuales de las acciones de GitHub (Node 24).
+
 ## [1.3.0] - 2026-11-19
 
 ### Añadido
@@ -111,6 +145,7 @@ detiene si falta.
   colores, grosor y opacidad, deshacer/rehacer, capturas con y sin dibujo, atajos globales, modo
   «Ratón libre», varios monitores y escalado de pantalla (DPI).
 
+[1.4.0]: https://github.com/pollorijas/Pizarra_Virtual/releases/tag/v1.4.0
 [1.3.0]: https://github.com/pollorijas/Pizarra_Virtual/releases/tag/v1.3.0
 [1.2.2]: https://github.com/pollorijas/Pizarra_Virtual/releases/tag/v1.2.2
 [1.2.1]: https://github.com/pollorijas/Pizarra_Virtual/releases/tag/v1.2.1

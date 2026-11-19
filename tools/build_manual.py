@@ -257,11 +257,97 @@ def build_images() -> dict[str, QImage]:
     images["presentacion.png"] = _mosaic([foco, foco_rect, cortina, resaltar, laser, _texto_editado(ctrl, ov, shot)], 2)
 
     images["figuras.png"] = _shapes_and_stamps()
+    images["novedades.png"], images["temporizador.png"] = _v14_images(ctrl, ov, app)
     images["plantillas.png"] = _templates_mosaic()
 
     ctrl.dirty = False
     ctrl.shutdown()
     return images
+
+
+def _v14_images(ctrl, ov, app):
+    """Formas perfectas (antes / después), selección, imagen pegada y temporizador."""
+    from pizarra_virtual import render
+    from pizarra_virtual.items import StrokeItem
+    from pizarra_virtual.shape_recognition import recognize
+
+    # 1) Formas perfectas: a mano (izquierda) y reconocidas (derecha)
+    tile = QImage(W, H, QImage.Format.Format_ARGB32)
+    tile.fill(QColor(255, 255, 255))
+    p = QPainter(tile)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    rng = __import__("random").Random(3)
+
+    def hand(pts):
+        return StrokeItem(Tool.PEN, (27, 63, 122, 255), 4,
+                          points=[(x + rng.uniform(-3, 3), y + rng.uniform(-3, 3), 4) for x, y in pts])
+    circle = [(190 + 80 * math.cos(k / 14), 150 + 75 * math.sin(k / 14)) for k in range(95)]
+    tri = []
+    for a, b in (((110, 420), (190, 270)), ((190, 270), (275, 420)), ((275, 420), (108, 418))):
+        tri += [(a[0] + (b[0] - a[0]) * k / 40, a[1] + (b[1] - a[1]) * k / 40) for k in range(41)]
+    for pts in (circle, tri):
+        raw = hand(pts)
+        render.draw_item(p, raw)
+        shape = recognize(raw)
+        render.draw_item(p, __import__("pizarra_virtual.items", fromlist=["transformed"]).transformed(shape, dx=330))
+    p.setPen(QColor(120, 120, 120))
+    f = QFont()
+    f.setPixelSize(40)
+    p.setFont(f)
+    p.drawText(QRectF(330, 180, 120, 100), Qt.AlignmentFlag.AlignCenter, "→")
+    p.end()
+    formas = _label(tile, "Formas perfectas: a mano → exactas")
+
+    # 2) Selección con su recuadro (sobre el ejemplo de clase)
+    ctrl.set_tool(Tool.SELECT)
+    zone = QRectF(440, 280, 300, 140)  # el recuadro azul con «¡Importante!»
+    chosen = [i.uid for i in ctrl.items_for(ov.key)
+              if getattr(i, "uid", None) and zone.contains(render.item_rect(i).center())]
+    assert chosen, "no hay nada que seleccionar en el ejemplo"
+    ov.set_selection(chosen)
+    app.processEvents()
+    sel = _label(_crop(ov.grab().toImage()), "Seleccionar: mover y cambiar de tamaño")
+    ov.clear_selection()
+
+    # 3) Imagen pegada (una foto de ejemplo dibujada aquí) con una anotación encima
+    photo = QImage(360, 220, QImage.Format.Format_RGB32)
+    g = QPainter(photo)
+    g.setRenderHint(QPainter.RenderHint.Antialiasing)
+    sky = __import__("PySide6.QtGui", fromlist=["QLinearGradient"]).QLinearGradient(0, 0, 0, 220)
+    sky.setColorAt(0, QColor(120, 180, 240))
+    sky.setColorAt(1, QColor(210, 235, 255))
+    g.fillRect(photo.rect(), sky)
+    g.setPen(Qt.PenStyle.NoPen)
+    g.setBrush(QColor(76, 140, 74))
+    g.drawEllipse(QRectF(-60, 140, 300, 160))
+    g.drawEllipse(QRectF(150, 120, 300, 180))
+    g.setBrush(QColor(255, 213, 79))
+    g.drawEllipse(QRectF(270, 25, 55, 55))
+    g.end()
+    page = session.Page(background="white")
+    from pizarra_virtual.items import ImageItem
+    from PySide6.QtCore import QBuffer, QIODevice
+    buf = QBuffer()
+    buf.open(QIODevice.OpenModeFlag.WriteOnly)
+    photo.save(buf, "PNG")
+    img_item = ImageItem(bytes(buf.data()), 60, 80, 360, 220)
+    note = StrokeItem(Tool.PEN, (229, 57, 53, 255), 4,
+                      points=[(330 + 45 * math.cos(k / 8), 52 + 45 * math.sin(k / 8) + 60, 4) for k in range(52)])
+    from pizarra_virtual.items import TextItem
+    label = TextItem((229, 57, 53, 255), 26, 1.0, 440, 90, "el Sol", True)
+    pasted = _label(_crop(session.render_page(page, [img_item, note, label], W, H, scale=1.0)),
+                    "Imagen pegada (Ctrl+V) y anotada")
+
+    # 4) Temporizador
+    ctrl.start_timer(300)
+    win = ctrl.timer_window
+    t0 = win.clock()
+    win.clock = lambda: t0 + 132
+    win.tick()
+    app.processEvents()
+    timer_img = win.grab().toImage()
+    ctrl.hide_timer()
+    return _mosaic([formas, sel, pasted], 3), timer_img
 
 
 def _shapes_and_stamps() -> QImage:

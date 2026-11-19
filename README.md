@@ -48,6 +48,10 @@ el **Manual de usuario** en PDF.
 | **Más figuras** | Botón con menú: **pentágono**, **hexágono**, **octágono** (P), **rombo** (D), **estrella** (E), **rectángulo redondeado** (Q), **ejes de coordenadas** (J), **flecha doble** (W), **flecha curva** (U) y **llave** (K). |
 | **Sellos** | Tecla **S** o botón con menú: **✔ correcto**, **✘ incorrecto**, **estrella**, **carita feliz**, **números** (1, 2, 3… que siguen la cuenta en cada página) e **interrogación**. Un clic pone el sello; el cursor muestra la vista previa. |
 | **Plantillas** | Botón con menú: **mapa conceptual**, **línea de tiempo**, **diagramas de Venn** (2 y 3 conjuntos), **tabla de dos columnas**, **tabla S-Q-A**, **esquema de redacción**, **ciclo** y **causa y efecto**. Se insertan y se quitan de una vez (Ctrl+Z); cada rótulo se edita con un clic. |
+| **Formas perfectas** | Opción que se **activa o desactiva** (botón con pincel, lápiz o pluma, o tecla **G**; desactivada por defecto): al soltar el trazo, las rectas, círculos, elipses, rectángulos y polígonos dibujados a mano se convierten en figuras exactas. Lo demás queda tal cual. |
+| **Seleccionar y mover** | Tecla **A**: clic en un elemento o lazo para seleccionar; arrastrar para mover y la esquina para cambiar el tamaño. **Supr** elimina, **Ctrl+D** duplica, **Ctrl+A** selecciona todo. Lo borrado con la goma sigue borrado al mover. |
+| **Pegar** | **Ctrl+V** o botón: pega una imagen (o archivo de imagen) centrada en el cursor, lista para moverla o agrandarla; un texto copiado se pega como texto. Se guarda en la sesión y sale en el PDF. |
+| **Temporizador** | Botón con menú: cuenta regresiva (1 a 30 min u otro tiempo) o cronómetro, en una ventanita siempre encima con pausa, ±1 minuto y aviso «¡Tiempo!» en rojo al terminar. |
 | **Color y grosor** | Botón de color con selector completo + paleta de 12 colores; deslizadores de **grosor** y **opacidad** (cada herramienta recuerda su propio tamaño y opacidad). También con la **rueda del ratón** sobre la pizarra. |
 | **Texto** | Tecla **T**: clic donde quieras y escribe con el teclado (tildes, ñ, varias líneas, Ctrl+V para pegar). Tamaño de letra, color y **negrita**. Mientras escribes, las teclas no activan atajos. Esc o un clic fuera termina el texto. **Clic sobre un texto ya escrito** (donde todavía se vea: lo borrado con la goma no se reabre) para editarlo: cursor con flechas, Inicio/Fin, Supr, arrastrar para moverlo; cada edición se puede deshacer. |
 | **Puntero láser / tinta temporal** | Tecla **L**: el cursor se convierte en un punto luminoso; al arrastrar deja un trazo brillante que **se desvanece solo** (no se guarda). |
@@ -135,6 +139,9 @@ deshacer, rehacer, borrar todo · zoom, captura, carpeta de capturas · ocultar,
 | **D** · **E** · **Q** | Rombo · Estrella · Rectángulo redondeado |
 | **J** · **W** · **U** · **K** | Ejes · Flecha doble · Flecha curva · Llave |
 | **S** | Sellos (otra vez **S**: siguiente sello) |
+| **A** | Seleccionar y mover (Ctrl+A todo · Ctrl+D duplicar · Supr eliminar · Esc quitar selección) |
+| **G** | Formas perfectas sí / no |
+| **Ctrl+V** | Pegar una imagen o un texto |
 | **B** | Cambiar tipo de pincel (Duro → Suave → Aerógrafo → Caligráfico) |
 | **T** | Texto |
 | **L** | Puntero láser / tinta temporal |
@@ -147,7 +154,7 @@ deshacer, rehacer, borrar todo · zoom, captura, carpeta de capturas · ocultar,
 | **Clic derecho** | Cancelar el trazo o la figura en curso |
 | **Ctrl+Z** | Deshacer |
 | **Ctrl+Y** o **Ctrl+Shift+Z** | Rehacer |
-| **Supr** | Borrar todo (se puede deshacer) |
+| **Supr** | Borrar todo (se puede deshacer); con algo seleccionado, solo eso |
 | **Z** | Activar / salir del zoom |
 | **F** · **V** · **M** | Foco · Cortina · Resaltar cursor y clics |
 | **Mayús+F** | Foco en círculo o en rectángulo |
@@ -259,21 +266,21 @@ versión, primero:
 2. añade su sección `## [X.Y.Z] - fecha` al principio de [`CHANGELOG.md`](CHANGELOG.md) (registro de
    cambios de todas las versiones);
 3. escribe sus notas en `notas/vX.Y.Z.md` (texto de la release; ver
-   [`notas/v1.3.0.md`](notas/v1.3.0.md)).
+   [`notas/v1.4.0.md`](notas/v1.4.0.md)).
 
 El flujo comprueba esos tres puntos y no publica si falta alguno. Súbelos y después crea y sube la
 etiqueta:
 
 ```bash
-git tag v1.3.0
+git tag v1.4.0
 ```
 
 ```bash
-git push origin v1.3.0
+git push origin v1.4.0
 ```
 
 También se puede publicar sin crear la etiqueta a mano: en **Actions → Compilar PizarraVirtual.exe →
-Run workflow**, escribe la versión (p. ej. `v1.3.0`) en el campo *version* (y marca *borrar_anteriores* para dejar solo esa); el flujo crea la etiqueta
+Run workflow**, escribe la versión (p. ej. `v1.4.0`) en el campo *version* (y marca *borrar_anteriores* para dejar solo esa); el flujo crea la etiqueta
 sobre ese commit. En ambos casos vuelve a pasar todas las pruebas y, solo si todo va bien, publica la
 release con el `.zip` (ejecutable + manual).
 
@@ -393,6 +400,8 @@ Pizarra_Virtual/
 │   ├── overlay.py                # Superposición por monitor: entrada de ratón/tableta y lienzo
 │   ├── render.py                 # Rasterizado de pinceles, pluma, texto, figuras, sellos y pautas
 │   ├── templates.py              # Plantillas (mapa conceptual, línea de tiempo, Venn, tablas…)
+│   ├── shape_recognition.py      # «Formas perfectas»: reconocimiento de formas dibujadas a mano
+│   ├── timer.py                  # Temporizador / cronómetro en pantalla
 │   ├── session.py                # Páginas, sesiones .pizarra y exportación a PDF
 │   ├── toolbar.py                # Barra de herramientas flotante
 │   ├── hotkeys.py                # Atajos globales (RegisterHotKey)

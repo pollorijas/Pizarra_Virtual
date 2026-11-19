@@ -1349,6 +1349,8 @@ El <b>Manual de usuario</b> (PDF) explica todas las funciones.</p>
 <tr><td><b>P</b> · <b>D</b> · <b>E</b> · <b>Q</b></td><td>Polígonos · Rombo · Estrella · Rectángulo redondeado</td></tr>
 <tr><td><b>J</b> · <b>W</b> · <b>U</b> · <b>K</b></td><td>Ejes · Flecha doble · Flecha curva · Llave</td></tr>
 <tr><td><b>S</b></td><td>Sellos (otra vez S: siguiente sello) · Plantillas: botón de la barra</td></tr>
+<tr><td><b>A</b> · <b>G</b> · <b>Ctrl+V</b></td><td>Seleccionar y mover · Formas perfectas · Pegar imagen o texto</td></tr>
+<tr><td><b>Ctrl+A</b> · <b>Ctrl+D</b> · <b>Supr</b></td><td>Seleccionar todo · Duplicar · Eliminar lo seleccionado</td></tr>
 <tr><td><b>B</b> · <b>R</b> · <b>C</b></td><td>Tipo de pincel · Relleno de figuras · Color</td></tr>
 <tr><td><b>+ / -</b> o rueda</td><td>Grosor (tamaño de letra con Texto)</td></tr>
 <tr><td><b>Mayús + rueda</b></td><td>Opacidad</td></tr>
