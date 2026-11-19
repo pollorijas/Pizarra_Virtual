@@ -486,7 +486,9 @@ def test_native_erased_text_stamps_and_templates_with_real_input(ctrl, qapp):
     ctrl.set_tool(Tool.TEXT)
     ctrl.set_size(48)
     _settle(qapp)
-    _real_mouse(qapp, [(300, 250), (300, 250)], dpr)
+    # lejos de la barra (en pantallas pequeñas ocupa dos columnas, unos 270 px)
+    x0 = max(500, ctrl.toolbar.geometry().right() + 120)
+    _real_mouse(qapp, [(x0, 250), (x0, 250)], dpr)
     _real_keys(qapp, "borrar")
     esc()
     (t,) = [i for i in ctrl.items_for(ov.key) if isinstance(i, TextItem)]
@@ -494,7 +496,7 @@ def test_native_erased_text_stamps_and_templates_with_real_input(ctrl, qapp):
     ctrl.set_tool(Tool.ERASER)
     ctrl.set_size(120)
     cy = box.center().y()
-    _real_mouse(qapp, [(x, cy) for x in range(int(box.left()) - 60, int(box.right()) + 60, 12)], dpr)
+    _real_mouse(qapp, [(x, cy) for x in range(int(box.left()) - 50, int(box.right()) + 60, 12)], dpr)
     d = ov.canvas.devicePixelRatio()
     left_ink = sum(ov.canvas.pixelColor(round(x * d), round(y * d)).alpha() > 0
                    for x in range(int(box.left()), int(box.right()), 2)
@@ -509,7 +511,7 @@ def test_native_erased_text_stamps_and_templates_with_real_input(ctrl, qapp):
     # 2) sello con un clic real
     ctrl.set_stamp_kind("check")
     _settle(qapp)
-    _real_mouse(qapp, [(500, 420), (500, 420)], dpr)
+    _real_mouse(qapp, [(x0, 420), (x0, 420)], dpr)
     assert isinstance(ctrl.history[-1][1], StampItem)
 
     # 3) plantilla y edición de un rótulo
