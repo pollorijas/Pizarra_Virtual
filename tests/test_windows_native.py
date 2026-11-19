@@ -495,9 +495,15 @@ def test_native_erased_text_stamps_and_templates_with_real_input(ctrl, qapp):
     ctrl.set_size(120)
     cy = box.center().y()
     _real_mouse(qapp, [(x, cy) for x in range(int(box.left()) - 60, int(box.right()) + 60, 12)], dpr)
+    d = ov.canvas.devicePixelRatio()
+    left_ink = sum(ov.canvas.pixelColor(round(x * d), round(y * d)).alpha() > 0
+                   for x in range(int(box.left()), int(box.right()), 2)
+                   for y in range(int(box.top()), int(box.bottom()), 2))
+    kinds = [type(i).__name__ + ":" + getattr(getattr(i, "tool", None), "value", "") for _, i in ctrl.history]
+    assert left_ink == 0, (left_ink, kinds, box)  # la goma real borró todo el texto
     ctrl.set_tool(Tool.TEXT)
     _real_mouse(qapp, [(box.center().x(), cy), (box.center().x(), cy)], dpr)
-    assert ov.editing_text is not None and ov.editing_text.uid != t.uid  # texto nuevo, no el borrado
+    assert ov.editing_text is not None and ov.editing_text.uid != t.uid, (kinds, box)  # texto nuevo
     esc()
 
     # 2) sello con un clic real
