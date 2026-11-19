@@ -554,7 +554,8 @@ def test_native_v14_recognition_select_paste_and_timer(ctrl, qapp):
     user32.GetAncestor.restype = wintypes.HWND
     ov = _overlay(ctrl)
     dpr = ov.devicePixelRatioF()
-    cx = max(520, ctrl.toolbar.geometry().right() + 200)
+    # Todo dentro de la pantalla también al 150 % (unos 683 x 512 px lógicos) y lejos de la barra
+    cx = min(ov.width() - 100, max(ctrl.toolbar.geometry().right() + 100, 420))
 
     def key(vk, ctrl_down=False):
         if ctrl_down:
@@ -569,18 +570,19 @@ def test_native_v14_recognition_select_paste_and_timer(ctrl, qapp):
     ctrl.set_tool(Tool.PEN)
     ctrl.set_recognize_shapes(True)
     _settle(qapp)
-    pts = [(cx + 90 * math.cos(a / 20), 300 + 90 * math.sin(a / 20)) for a in range(0, 132)]
+    pts = [(cx + 70 * math.cos(a / 16), 260 + 70 * math.sin(a / 16)) for a in range(0, 106)]
     _real_mouse(qapp, pts, dpr)
     circle = ctrl.history[-1][1]
     assert isinstance(circle, ShapeItem) and circle.tool == Tool.ELLIPSE
 
-    # 2) Seleccionar con un clic sobre el borde y mover 120 px; Supr lo elimina
+    # 2) Seleccionar con un clic sobre el borde y bajarlo 100 px; Supr lo elimina
     ctrl.set_tool(Tool.SELECT)
     _settle(qapp)
-    _real_mouse(qapp, [(cx + 90, 300)] + [(cx + 90 + k * 10, 300) for k in range(1, 13)], dpr)
+    edge = (circle.x2, (circle.y1 + circle.y2) / 2)
+    _real_mouse(qapp, [edge] + [(edge[0], edge[1] + k * 10) for k in range(1, 11)], dpr)
     assert isinstance(ctrl.history[-1][1], TransformItem) and ov.selection == [circle.uid]
     (moved,) = [i for i in ctrl.items_for(ov.key) if getattr(i, "uid", None) == circle.uid]
-    assert abs(moved.x1 - (circle.x1 + 120)) <= 2
+    assert abs(moved.y1 - (circle.y1 + 100)) <= 2 and abs(moved.x1 - circle.x1) <= 2
     key(0x2E)  # Supr
     assert isinstance(ctrl.history[-1][1], DeleteItem) and not ctrl.items_for(ov.key)
 
@@ -589,7 +591,7 @@ def test_native_v14_recognition_select_paste_and_timer(ctrl, qapp):
     img.fill(QColor(30, 136, 229))
     QGuiApplication.clipboard().setImage(img)
     _settle(qapp, 200)
-    user32.SetCursorPos(round(cx * dpr), round(300 * dpr))
+    user32.SetCursorPos(round(cx * dpr), round(260 * dpr))
     ctrl._raise_toolbar(activate=True)
     _settle(qapp, 300)
     key(0x56, ctrl_down=True)  # Ctrl+V
