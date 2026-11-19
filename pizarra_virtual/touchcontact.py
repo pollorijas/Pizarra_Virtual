@@ -51,6 +51,8 @@ class TouchContacts(QAbstractNativeEventFilter):
         super().__init__()
         self.size = 0.0  # ancho del último contacto (píxeles físicos)
         self.when = 0.0
+        self.downs = 0  # toques vistos (diagnóstico)
+        self.error = ""
 
     def recent_size(self) -> float:
         return self.size if time.monotonic() - self.when <= RECENT_S else 0.0
@@ -61,6 +63,7 @@ class TouchContacts(QAbstractNativeEventFilter):
             if et == b"windows_generic_MSG":
                 msg = wintypes.MSG.from_address(int(message))
                 if msg.message == WM_POINTERDOWN:
+                    self.downs += 1
                     pid = int(msg.wParam) & 0xFFFF
                     kind = ctypes.c_uint32()
                     if _user32.GetPointerType(pid, ctypes.byref(kind)) and kind.value == PT_TOUCH:
@@ -70,6 +73,10 @@ class TouchContacts(QAbstractNativeEventFilter):
                             r = info.rcContact
                             self.size = float(max(r.right - r.left, r.bottom - r.top))
                             self.when = time.monotonic()
+                        else:
+                            self.error = f"GetPointerTouchInfo: {ctypes.GetLastError()} mask={info.touchMask}"
+                    else:
+                        self.error = f"tipo {kind.value}"
         except Exception:  # pragma: no cover
             log.exception("Error leyendo el contacto táctil")
         return False, 0
