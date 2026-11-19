@@ -1667,7 +1667,8 @@ class Overlay(QWidget):
             if g["primary"] is None and len(ev.points()) == 1:
                 pt = ev.points()[0]
                 g["primary"] = pt.id()
-                size = max(pt.ellipseDiameters().width(), pt.ellipseDiameters().height())
+                size = max(pt.ellipseDiameters().width(), pt.ellipseDiameters().height(),
+                           self.ctrl.touch_contact_size() / (self.devicePixelRatioF() or 1.0))
                 palm = size >= PALM_SIZE
                 if palm:  # la palma borra, con una goma del tamaño del contacto
                     g["palm_size"] = self.ctrl.sizes[Tool.ERASER]

@@ -467,8 +467,12 @@ def test_show_keys_displays_on_screen_and_counts_repeats(ctrl):
     press()
     assert ov.keys_shown == ["Ctrl + V  ×2", "Intro"]
     img = _grab(ov)
-    bubble = _px(ov, img, ov.width() / 2, ov.height() - 110)
-    assert bubble.alpha() > 200 and bubble.red() < 60  # globo oscuro abajo en el centro
+    from PySide6.QtGui import QFontMetrics
+
+    fm = QFontMetrics(ov._key_font())
+    left = (ov.width() - fm.horizontalAdvance("Intro") - 36) / 2  # borde izquierdo del globo
+    bubble = _px(ov, img, left + 8, ov.height() - 90 - (fm.height() + 18) / 2)
+    assert bubble.alpha() > 200 and bubble.red() < 60  # globo oscuro abajo en el centro (sin letras)
     ctrl.toggle_show_keys()
     assert not ctrl.show_keys and ov.keys_shown == []
 

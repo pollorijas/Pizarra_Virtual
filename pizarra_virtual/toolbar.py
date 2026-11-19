@@ -256,7 +256,7 @@ class Toolbar(QWidget):
             col.setFixedWidth(self.col_width)
             col_lay = QVBoxLayout(col)
             col_lay.setContentsMargins(0, 0, 0, 0)
-            col_lay.setSpacing(6)
+            col_lay.setSpacing(4)
             self.body_layout.addWidget(col, 0, Qt.AlignmentFlag.AlignTop)
             columns.append(col_lay)
         self._columns = [lay_.parentWidget() for lay_ in columns]

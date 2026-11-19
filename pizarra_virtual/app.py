@@ -14,7 +14,7 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QAction, QColor, QCursor, QGuiApplication, QImage
 from PySide6.QtWidgets import QApplication, QFileDialog, QInputDialog, QMenu, QMessageBox, QSystemTrayIcon
 
-from . import __version__, capture, icons, keyview, session, winutil
+from . import __version__, capture, icons, keyview, session, touchcontact, winutil
 from .hotkeys import MOD_ALT, MOD_CONTROL, MOD_SHIFT, GlobalHotkeys
 from . import templates
 from .items import (
@@ -124,6 +124,7 @@ class Controller(QObject):
         self.key_state = lambda: winutil.pressed_keys(keyview.KEYS)  # teclas pulsadas (se sustituye en pruebas)
         self._key_watcher = keyview.KeyWatcher()
         self._crop: dict | None = None  # recorte en curso: destino y estado a restaurar
+        self._touch_contacts = touchcontact.install()  # tamaño real de los toques (palma)
 
         self.toolbar = Toolbar(self)
         self.hotkeys = GlobalHotkeys(self) if enable_hotkeys else None
@@ -200,6 +201,7 @@ class Controller(QObject):
         self._shutting_down = True
         self._fx_timer.stop()
         self.app.removeEventFilter(self)
+        touchcontact.uninstall(self._touch_contacts)
         if self.hotkeys is not None:
             self.hotkeys.unregister_all()
         if self.tray is not None:
@@ -704,6 +706,10 @@ class Controller(QObject):
         self._changed(repaint=True)
 
     # ---- modo táctil
+
+    def touch_contact_size(self) -> float:
+        """Ancho (píxeles físicos) del toque que acaba de empezar, si Windows lo informa; si no, 0."""
+        return self._touch_contacts.recent_size() if self._touch_contacts is not None else 0.0
 
     @property
     def touch_scale(self) -> float:
