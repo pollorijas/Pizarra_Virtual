@@ -174,6 +174,7 @@ class Overlay(QWidget):
         self._touch_active = False  # gesto táctil en curso (el ratón simulado se ignora)
         self._touch: dict | None = None
         self.touch_events = 0  # eventos táctiles recibidos (diagnóstico)
+        self._last_touch_ms = -1e9
         self.touch_sizes: list = []  # tamaños de contacto vistos (diagnóstico)
         self._last_pos = QPointF()
         self._last_t = 0
@@ -1529,8 +1530,14 @@ class Overlay(QWidget):
         else:
             self._release(self.to_canvas(view), None, t, modifiers)
 
+    def _mouse_from_touch(self, e) -> bool:
+        """Ratón que Windows o Qt simulan a partir de un toque ya atendido como toque: se ignora
+        (si no, al levantar el dedo quedaría un punto suelto con la herramienta actual)."""
+        return (e.source() != Qt.MouseEventSource.MouseEventNotSynthesized
+                and now_ms() - self._last_touch_ms < 1000)
+
     def mousePressEvent(self, e):  # noqa: N802
-        if self._tablet_active or self._touch_active:
+        if self._tablet_active or self._touch_active or self._mouse_from_touch(e):
             return
         btn = e.button()
         view = e.position()
@@ -1546,7 +1553,7 @@ class Overlay(QWidget):
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
 
     def mouseMoveEvent(self, e):  # noqa: N802
-        if self._tablet_active or self._touch_active:
+        if self._tablet_active or self._touch_active or self._mouse_from_touch(e):
             return
         view = e.position()
         if self._pan_from is not None:
@@ -1560,7 +1567,7 @@ class Overlay(QWidget):
             self._pointer_move(view, e.timestamp(), e.modifiers())
 
     def mouseReleaseEvent(self, e):  # noqa: N802
-        if self._tablet_active or self._touch_active:
+        if self._tablet_active or self._touch_active or self._mouse_from_touch(e):
             return
         btn = e.button()
         if btn == Qt.MouseButton.LeftButton:
@@ -1639,6 +1646,7 @@ class Overlay(QWidget):
 
     def _touch_event(self, ev) -> None:
         self.touch_events += 1
+        self._last_touch_ms = now_ms()
         t = ev.type()
         now = ev.timestamp()
         g = self._touch

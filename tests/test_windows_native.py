@@ -784,7 +784,7 @@ def test_native_v15_real_touch_draws_undoes_and_palm_erases(ctrl, qapp):
     _settle(qapp, 300)
     last = ctrl.history[-1][1]
     tc = ctrl._touch_contacts
-    assert last.tool == Tool.ERASER, (last.tool, tc.downs, tc.size, tc.error, ov.touch_events, str(ov.touch_sizes[-10:]))
+    assert last.tool == Tool.ERASER, (last.tool, tc.downs, tc.size, tc.error, ov.touch_events, [i.tool.value for _k, i in ctrl.history])
     assert ctrl.tool == Tool.BRUSH and ctrl.sizes[Tool.ERASER] < 120 * 2  # el tamaño de la goma se restaura
 
     # 3) Toque con dos dedos a la vez: deshacer (la goma de la palma)
