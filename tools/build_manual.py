@@ -23,7 +23,7 @@ if sys.platform == "win32" and os.environ["QT_QPA_PLATFORM"].startswith("offscre
     # PySide6 no incluye: sin esto no hay ninguna fuente y cada letra sale como un cuadrado.
     os.environ.setdefault("QT_QPA_FONTDIR", WIN_FONTS)
 
-from PySide6.QtCore import QMarginsF, QPoint, QRect, QRectF, QSettings, Qt, QUrl  # noqa: E402
+from PySide6.QtCore import QMarginsF, QPoint, QPointF, QRect, QRectF, QSettings, Qt, QUrl  # noqa: E402
 from PySide6.QtGui import (  # noqa: E402
     QColor, QCursor, QFont, QFontDatabase, QFontInfo, QFontMetrics, QImage, QPageLayout, QPageSize, QPainter, QPdfWriter, QTextDocument,
 )
@@ -259,6 +259,7 @@ def build_images() -> dict[str, QImage]:
     images["figuras.png"] = _shapes_and_stamps()
     images["novedades.png"], images["temporizador.png"] = _v14_images(ctrl, ov, app)
     images["plantillas.png"] = _templates_mosaic()
+    images.update(_v15_images(ctrl, ov, app))
 
     ctrl.dirty = False
     ctrl.shutdown()
@@ -348,6 +349,110 @@ def _v14_images(ctrl, ov, app):
     timer_img = win.grab().toImage()
     ctrl.hide_timer()
     return _mosaic([formas, sel, pasted], 3), timer_img
+
+
+def _v15_images(ctrl, ov, app) -> dict[str, QImage]:
+    """Notas adhesivas, tapar zona, cortina desde un lado, teclas en pantalla, recorte y modo táctil."""
+    from pizarra_virtual import overlay as overlay_mod
+
+    out: dict[str, QImage] = {}
+    ctrl.clear_all()
+    ctrl.set_background("white")
+    ctrl.set_pattern("ruled")
+    ov._trails.clear()
+
+    # 1) Notas adhesivas sobre un ejercicio
+    _type(ctrl, ov, 40, 50, "Ejercicio 3", 34, "#1b3f7a", bold=True)
+    _type(ctrl, ov, 40, 120, "¿Cuánto es 2 + 3 × 4?", 28, "#212121")
+    for color, (x, y), text in (("yellow", (430, 40), "Tarea:\nleer pág. 32"),
+                                ("pink", (440, 200), "¡Prueba\nel viernes!"),
+                                ("blue", (60, 250), "Primero la\nmultiplicación")):
+        ctrl.set_note_color(color)
+        ctrl.set_tool(Tool.NOTE)
+        ctrl.set_size(26)
+        QTest.mouseClick(ov, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, QPoint(x, y))
+        from PySide6.QtCore import QEvent
+        from PySide6.QtGui import QKeyEvent
+        for ch in text:
+            key = Qt.Key.Key_Return if ch == "\n" else 0
+            QApplication.sendEvent(ctrl.toolbar, QKeyEvent(QEvent.Type.KeyPress, key, Qt.KeyboardModifier.NoModifier,
+                                                           "" if ch == "\n" else ch))
+        QTest.keyClick(ctrl.toolbar, Qt.Key.Key_Escape)
+    app.processEvents()
+    notas = _label(_crop(ov.grab().toImage()), "Notas adhesivas")
+
+    # 2) Tapar zona: la respuesta tapada (y una ya descubierta)
+    ctrl.clear_all()
+    _type(ctrl, ov, 40, 50, "Respuestas", 34, "#1b3f7a", bold=True)
+    for i, (q, a) in enumerate((("2 + 3 × 4 =", "14"), ("(2 + 3) × 4 =", "20"), ("10 − 4 ÷ 2 =", "8"))):
+        _type(ctrl, ov, 40, 130 + i * 90, q, 30, "#212121")
+        _type(ctrl, ov, 300, 130 + i * 90, a, 30, "#c62828", bold=True)
+    ctrl.set_tool(Tool.COVER)
+    for i in range(3):
+        _drag(ov, [(285, 105 + i * 90), (330, 130 + i * 90), (380, 158 + i * 90)])
+    # Se descubre solo la del medio; las otras siguen tapadas
+    QTest.mouseClick(ov, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, QPoint(330, 220))
+    app.processEvents()
+    tapar = _label(_crop(ov.grab().toImage()), "Tapar zona: clic para descubrir")
+
+    # 3) Cortina desde la izquierda sobre una tabla
+    ctrl.clear_all()
+    _type(ctrl, ov, 40, 120, "Año      1810      1818      1891", 30, "#212121", bold=True)
+    _type(ctrl, ov, 40, 200, "Hecho   Junta     Indep.    Guerra", 30, "#212121")
+    ctrl.set_tool(Tool.BRUSH)
+    ctrl.show_curtain("left")
+    ov.set_curtain(300)
+    app.processEvents()
+    cortina = _label(_crop(ov.grab().toImage()), "Cortina desde la izquierda")
+    ctrl.toggle_curtain()
+
+    # 4) Teclas en pantalla
+    ctrl.clear_all()
+    ctrl.set_background("transparent")
+    ctrl.set_pattern("none")
+    now = overlay_mod.now_ms()
+    ov.show_key("Ctrl + C", now)
+    ov.show_key("Ctrl + V", now)
+    ov.show_key("Ctrl + V", now)
+    app.processEvents()
+    full = ov.grab().toImage()
+    d = full.devicePixelRatio()
+    keys_tile = QImage(W, H, QImage.Format.Format_RGB32)
+    keys_tile.fill(QColor(236, 240, 246))
+    p = QPainter(keys_tile)
+    src = QRectF((ov.width() - W) / 2 * d, (ov.height() - H) * d, W * d, H * d)
+    p.drawImage(QRectF(0, 0, W, H), full, src)
+    p.end()
+    teclas = _label(keys_tile, "Teclas pulsadas (Ctrl+Alt+K)")
+    ov.clear_keys()
+    out["notas.png"] = _mosaic([notas], 1)
+    out["presentacion15.png"] = _mosaic([tapar, cortina, teclas], 3)
+
+    # 5) Recortar zona (la pantalla congelada con el rectángulo elegido)
+    ctrl.set_background("white")
+    ctrl.set_pattern("grid")
+    _sample_drawing(ctrl, ov)
+    app.processEvents()
+    frozen = ov.grab().toImage()
+    ov.start_crop(frozen)
+    ov._crop_press(QPointF(430, 270))
+    ov._crop_move(QPointF(720, 420))
+    app.processEvents()
+    out["recorte.png"] = _crop(ov.grab().toImage(), W, H)
+    ov.end_crop()
+
+    # 6) Barra en modo táctil
+    ctrl.set_touch_mode(True)
+    QTest.qWait(50)
+    tb = ctrl.toolbar
+    tb.body_layout.setDirection(QBoxLayout.Direction.LeftToRight)  # en dos columnas: más baja
+    tb.refit()
+    app.processEvents()
+    out["barra_tactil.png"] = tb.grab().toImage()
+    ctrl.set_touch_mode(False)
+    QTest.qWait(50)
+    ctrl.toolbar.move(5000, 0)
+    return out
 
 
 def _shapes_and_stamps() -> QImage:

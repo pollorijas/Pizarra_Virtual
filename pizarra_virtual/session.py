@@ -13,8 +13,8 @@ from PySide6.QtGui import QColor, QFont, QImage, QPageLayout, QPageSize, QPainte
 
 from . import __version__, render
 from .items import (
-    ClearItem, DeleteItem, DuplicateItem, GroupItem, ImageItem, ShapeItem, StampItem, StrokeItem, TextEditItem,
-    TextItem, TransformItem, resolve_items,
+    ClearItem, CoverItem, DeleteItem, DuplicateItem, GroupItem, ImageItem, NoteItem, ShapeItem, StampItem,
+    StrokeItem, TextEditItem, TextItem, TransformItem, resolve_items,
 )
 from .tools import BACKGROUNDS, PATTERNS, BrushType, Tool
 
@@ -59,6 +59,11 @@ def _item_to_dict(item) -> dict:
         return {"type": "shape", "tool": item.tool.value, "rgba": list(item.rgba), "size": item.size,
                 "opacity": item.opacity, "x1": item.x1, "y1": item.y1, "x2": item.x2, "y2": item.y2,
                 "filled": item.filled}
+    if isinstance(item, NoteItem):
+        return {"type": "note", "rgba": list(item.rgba), "size": item.size, "opacity": item.opacity,
+                "x": item.x, "y": item.y, "text": item.text, "bold": item.bold, "color": list(item.color)}
+    if isinstance(item, CoverItem):
+        return {"type": "cover", "x": item.x, "y": item.y, "w": item.w, "h": item.h, "opacity": item.opacity}
     if isinstance(item, TextItem):
         return {"type": "text", "rgba": list(item.rgba), "size": item.size, "opacity": item.opacity,
                 "x": item.x, "y": item.y, "text": item.text, "bold": item.bold}
@@ -105,6 +110,11 @@ def _item_from_dict(d: dict):
     if t == "text":
         return TextItem(tuple(d["rgba"]), float(d["size"]), float(d["opacity"]), float(d["x"]), float(d["y"]),
                         str(d.get("text", "")), bool(d.get("bold")))
+    if t == "note":
+        return NoteItem(tuple(d["rgba"]), float(d["size"]), float(d["opacity"]), float(d["x"]), float(d["y"]),
+                        str(d.get("text", "")), bool(d.get("bold")), color=tuple(d.get("color", (255, 238, 128, 255))))
+    if t == "cover":
+        return CoverItem(float(d["x"]), float(d["y"]), float(d["w"]), float(d["h"]), float(d.get("opacity", 1.0)))
     if t == "stamp":
         return StampItem(str(d["kind"]), tuple(d["rgba"]), float(d["size"]), float(d["opacity"]),
                          float(d["x"]), float(d["y"]), str(d.get("label", "")))

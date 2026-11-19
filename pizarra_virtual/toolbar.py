@@ -13,8 +13,8 @@ from PySide6.QtWidgets import (
 from . import icons
 from . import templates
 from .tools import (
-    BACKGROUNDS, BRUSH_LABELS, EXTRA_SHAPES, FILLABLE_SHAPES, MAIN_TOOLS, PALETTE, PATTERNS, RECOGNIZABLE_TOOLS,
-    STAMPS, TOOL_SPECS, BrushType, Tool,
+    BACKGROUNDS, BRUSH_LABELS, CURTAIN_SIDES, EXTRA_SHAPES, FILLABLE_SHAPES, MAIN_TOOLS, NOTE_COLORS, PALETTE,
+    PATTERNS, RECOGNIZABLE_TOOLS, STAMPS, TOOL_SPECS, UNSIZED_TOOLS, BrushType, Tool,
 )
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -48,6 +48,18 @@ QMenu::item:selected { background: #2f6fd1; }
 
 BTN = 32
 COL_WIDTH = 3 * BTN + 2 * 4
+# Modo táctil: además de los botones más grandes, letras, menús y deslizadores más cómodos para el dedo
+TOUCH_STYLE = """
+QLabel { font-size: 14px; }
+QLabel#title { font-size: 15px; }
+QLabel#section { font-size: 12px; }
+QComboBox { font-size: 14px; padding: 6px 8px; }
+QToolButton { font-size: 13px; }
+QSlider::groove:horizontal { height: 8px; border-radius: 4px; }
+QSlider::handle:horizontal { width: 26px; height: 26px; margin: -9px 0; border-radius: 13px; }
+QMenu { font-size: 15px; }
+QMenu::item { padding: 11px 26px; }
+"""
 
 
 class _Header(QWidget):
@@ -87,7 +99,12 @@ class Toolbar(QWidget):
         self.setWindowTitle("Pizarra Virtual")
         self.setWindowIcon(icons.app_icon())
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setStyleSheet(STYLE)
+        # Tamaños (más grandes en el modo táctil)
+        k = ctrl.touch_scale
+        self.k = k
+        self.btn = int(round(BTN * k))
+        self.col_width = 3 * self.btn + 2 * 4
+        self.setStyleSheet(STYLE + (TOUCH_STYLE if ctrl.touch_mode else ""))
         self._shortcuts: list[QShortcut] = []
         self._build()
         self._build_shortcuts()
@@ -102,8 +119,8 @@ class Toolbar(QWidget):
     def _tool_button(self, icon_name: str, tip: str, checkable: bool = False) -> QToolButton:
         b = QToolButton()
         b.setIcon(icons.icon(icon_name))
-        b.setIconSize(QSize(20, 20))
-        b.setFixedSize(BTN, BTN)
+        b.setIconSize(QSize(int(20 * self.k), int(20 * self.k)))
+        b.setFixedSize(self.btn, self.btn)
         b.setToolTip(tip)
         b.setCheckable(checkable)
         b.setFocusPolicy(Qt.FocusPolicy.NoFocus)
@@ -158,6 +175,30 @@ class Toolbar(QWidget):
             menu.addAction("Cerrar el temporizador").triggered.connect(lambda: self.ctrl.hide_timer())
         return menu
 
+    def build_notes_menu(self, menu: QMenu | None = None) -> QMenu:
+        menu = menu if menu is not None else QMenu(self)
+        menu.clear()
+        for key, (label, rgba) in NOTE_COLORS.items():
+            act = menu.addAction(icons.swatch_icon(rgba), f"Nota {label.lower()}")
+            act.setCheckable(True)
+            act.setChecked(self.ctrl.tool == Tool.NOTE and self.ctrl.note_color == key)
+            act.triggered.connect(lambda _c=False, k=key: self.ctrl.set_note_color(k))
+        return menu
+
+    def build_curtain_menu(self, menu: QMenu | None = None) -> QMenu:
+        menu = menu if menu is not None else QMenu(self)
+        menu.clear()
+        c = self.ctrl
+        for side, label in CURTAIN_SIDES.items():
+            act = menu.addAction(f"Cortina: {label.lower()}")
+            act.setCheckable(True)
+            act.setChecked(c.curtain_active and c.curtain_side == side)
+            act.triggered.connect(lambda _c=False, sd=side: c.show_curtain(sd))
+        if c.curtain_active:
+            menu.addSeparator()
+            menu.addAction("Quitar la cortina\tV").triggered.connect(lambda: c.toggle_curtain())
+        return menu
+
     def build_templates_menu(self, menu: QMenu | None = None) -> QMenu:
         menu = menu if menu is not None else QMenu(self)
         menu.clear()
@@ -182,16 +223,23 @@ class Toolbar(QWidget):
 
         # Cabecera (arrastrar + plegar)
         header = _Header(self)
-        header.setMinimumWidth(COL_WIDTH)
+        header.setMinimumWidth(self.col_width)
         hl = QHBoxLayout(header)
         hl.setContentsMargins(0, 0, 0, 0)
         title = QLabel("⠿ Pizarra")
         title.setObjectName("title")
         title.setToolTip("Arrastra desde aquí para mover la barra")
         hl.addWidget(title, 1)
+        small = int(22 * self.k)
+        self.touch_btn = self._tool_button("touch", "Modo táctil: botones y menús más grandes para usar con el dedo\n"
+                                                    "(dos dedos: deshacer · tres dedos: rehacer)", checkable=True)
+        self.touch_btn.setFixedSize(small, small)
+        self.touch_btn.setIconSize(QSize(int(16 * self.k), int(16 * self.k)))
+        self.touch_btn.clicked.connect(lambda c: self.ctrl.set_touch_mode(c))
+        hl.addWidget(self.touch_btn)
         self.collapse_btn = self._tool_button("chevron_up", "Plegar / desplegar la barra")
-        self.collapse_btn.setFixedSize(22, 22)
-        self.collapse_btn.setIconSize(QSize(16, 16))
+        self.collapse_btn.setFixedSize(small, small)
+        self.collapse_btn.setIconSize(QSize(int(16 * self.k), int(16 * self.k)))
         self.collapse_btn.clicked.connect(self.toggle_collapsed)
         hl.addWidget(self.collapse_btn)
         lay.addWidget(header)
@@ -205,7 +253,7 @@ class Toolbar(QWidget):
         columns = []
         for _ in range(2):
             col = QWidget()
-            col.setFixedWidth(COL_WIDTH)
+            col.setFixedWidth(self.col_width)
             col_lay = QVBoxLayout(col)
             col_lay.setContentsMargins(0, 0, 0, 0)
             col_lay.setSpacing(6)
@@ -221,8 +269,8 @@ class Toolbar(QWidget):
         self.mode_btn.setCheckable(True)
         self.mode_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.mode_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        self.mode_btn.setIconSize(QSize(18, 18))
-        self.mode_btn.setFixedHeight(30)
+        self.mode_btn.setIconSize(QSize(int(18 * self.k), int(18 * self.k)))
+        self.mode_btn.setFixedHeight(int(30 * self.k))
         self.mode_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.mode_btn.setToolTip("Activar / desactivar el dibujo (Ctrl+Alt+D).\n"
                                  "En «Ratón libre» los clics llegan a las ventanas de debajo.")
@@ -264,8 +312,11 @@ class Toolbar(QWidget):
                                            self.build_timer_menu, checkable=False)
         self.paste_btn = self._tool_button("paste", "Pegar una imagen o un texto copiado  [Ctrl+V]")
         self.paste_btn.clicked.connect(lambda: self.ctrl.paste())
+        # Notas adhesivas (el temporizador va con la presentación)
+        self.note_btn = self._menu_button("note", "Nota adhesiva  [O]: haz clic donde quieras pegarla y escribe.\n"
+                                                  "Elige aquí el color del papel.", self.build_notes_menu)
         for k, b in enumerate((self.more_shapes_btn, self.stamp_btn, self.templates_btn,
-                               self.select_btn, self.timer_btn, self.paste_btn)):
+                               self.select_btn, self.paste_btn, self.note_btn)):
             grid.addWidget(b, (n + k) // 3, (n + k) % 3)
         c1.addLayout(grid)
 
@@ -285,7 +336,7 @@ class Toolbar(QWidget):
         self.fill_btn.setCheckable(True)
         self.fill_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.fill_btn.setToolTip("Figuras rellenas [R]")
-        self.fill_btn.setFixedHeight(24)
+        self.fill_btn.setFixedHeight(int(24 * self.k))
         self.fill_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.fill_btn.clicked.connect(lambda c: self.ctrl.set_fill(c))
         c1.addWidget(self.fill_btn)
@@ -298,10 +349,10 @@ class Toolbar(QWidget):
         self.recognize_btn.setToolTip("Formas perfectas [G]: al soltar el trazo, las líneas, círculos,\n"
                                       "rectángulos y polígonos dibujados a mano se vuelven figuras exactas.\n"
                                       "Desactívalo para dibujar libremente.")
-        self.recognize_btn.setFixedHeight(24)
-        small = QFont(self.recognize_btn.font())
-        small.setPixelSize(10)
-        self.recognize_btn.setFont(small)
+        self.recognize_btn.setFixedHeight(int(24 * self.k))
+        small_font = QFont(self.recognize_btn.font())
+        small_font.setPixelSize(int(10 * self.k))
+        self.recognize_btn.setFont(small_font)
         self.recognize_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.recognize_btn.clicked.connect(lambda c: self.ctrl.set_recognize_shapes(c))
         c1.addWidget(self.recognize_btn)
@@ -314,7 +365,7 @@ class Toolbar(QWidget):
         self.bold_btn.setCheckable(True)
         self.bold_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.bold_btn.setToolTip("Texto en negrita")
-        self.bold_btn.setFixedHeight(24)
+        self.bold_btn.setFixedHeight(int(24 * self.k))
         self.bold_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.bold_btn.clicked.connect(lambda c: self.ctrl.set_text_bold(c))
         c1.addWidget(self.bold_btn)
@@ -322,7 +373,7 @@ class Toolbar(QWidget):
         # Color
         self.color_btn = QPushButton()
         self.color_btn.setObjectName("current")
-        self.color_btn.setFixedHeight(26)
+        self.color_btn.setFixedHeight(int(26 * self.k))
         self.color_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.color_btn.setToolTip("Elegir color personalizado [C]")
         self.color_btn.clicked.connect(self.pick_color)
@@ -333,7 +384,7 @@ class Toolbar(QWidget):
         for idx, hexcolor in enumerate(PALETTE):
             b = QPushButton()
             b.setObjectName("swatch")
-            b.setFixedSize(22, 22)
+            b.setFixedSize(int(22 * self.k), int(22 * self.k))
             b.setFocusPolicy(Qt.FocusPolicy.NoFocus)
             b.setToolTip(hexcolor)
             b.setStyleSheet(f"background: {hexcolor};")
@@ -381,7 +432,7 @@ class Toolbar(QWidget):
 
         # Presentación: foco, cortina, resaltar cursor
         c2.addWidget(self._section("Presentación"))
-        fx = QHBoxLayout()
+        fx = QGridLayout()
         fx.setSpacing(4)
         self.spot_btn = self._tool_button("spotlight", "Foco: oscurece todo menos alrededor del cursor\n"
                                                        "[F / Ctrl+Alt+F] · Alt + rueda: tamaño\n"
@@ -389,14 +440,26 @@ class Toolbar(QWidget):
         self.spot_btn.clicked.connect(lambda: self.ctrl.toggle_spotlight())
         self.spot_btn.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.spot_btn.customContextMenuRequested.connect(self._spotlight_menu)
-        self.curtain_btn = self._tool_button("curtain", "Cortina: tapa la pantalla y se descubre poco a poco\n"
-                                                        "[V] · arrástrala o usa ↓ / ↑", checkable=True)
-        self.curtain_btn.clicked.connect(lambda: self.ctrl.toggle_curtain())
+        self.curtain_btn = self._menu_button("curtain", "Cortina: tapa la pantalla y se descubre poco a poco\n"
+                                                         "desde arriba, abajo, la izquierda o la derecha.\n"
+                                                         "[V] quitar/poner · [Mayús+V] cambiar de lado ·\n"
+                                                         "arrástrala o usa las flechas", self.build_curtain_menu)
+        spec = TOOL_SPECS[Tool.COVER]
+        self.cover_btn = self._tool_button(spec.icon, "Tapar zona  [H]: arrastra para tapar una parte (p. ej. las\n"
+                                                      "respuestas); un clic sobre ella la descubre.", checkable=True)
+        self.cover_btn.clicked.connect(lambda: self.ctrl.set_tool(Tool.COVER))
+        self.tool_group.addButton(self.cover_btn)
+        self.tool_buttons[Tool.COVER] = self.cover_btn
         self.highlight_btn = self._tool_button("highlight", "Resaltar el cursor y los clics [M / Ctrl+Alt+M]",
                                                checkable=True)
         self.highlight_btn.clicked.connect(lambda: self.ctrl.toggle_highlight())
-        for b in (self.spot_btn, self.curtain_btn, self.highlight_btn):
-            fx.addWidget(b)
+        self.keys_btn = self._tool_button("keys", "Mostrar en pantalla los atajos que se pulsan\n"
+                                                  "(Ctrl + C, Alt + Tab, Intro…) [Ctrl+Alt+K].\n"
+                                                  "El texto que se escribe no se muestra.", checkable=True)
+        self.keys_btn.clicked.connect(lambda: self.ctrl.toggle_show_keys())
+        for i, b in enumerate((self.spot_btn, self.curtain_btn, self.cover_btn, self.highlight_btn,
+                               self.keys_btn, self.timer_btn)):
+            fx.addWidget(b, i // 3, i % 3)
         c2.addLayout(fx)
 
         # Páginas
@@ -425,7 +488,7 @@ class Toolbar(QWidget):
         clear = self._tool_button("trash", "Borrar todo (Supr)")
         clear.clicked.connect(self.ctrl.clear_all)
 
-        capture = self._tool_button("camera", "Captura de pantalla")
+        capture = self._tool_button("camera", "Captura de pantalla y recortar zona [X]")
         capture.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         capture.setMenu(self.ctrl.build_capture_menu(capture))
         folder = self._tool_button("file", "Sesión: abrir, guardar, exportar a PDF")
@@ -476,9 +539,15 @@ class Toolbar(QWidget):
         add("F", c.toggle_spotlight)
         add("Shift+F", c.toggle_spotlight_shape)
         add("V", c.toggle_curtain)
+        add("Shift+V", c.cycle_curtain_side)
         add("M", c.toggle_highlight)
-        add("Down", lambda: c.curtain_step(1))
-        add("Up", lambda: c.curtain_step(-1))
+        add("Down", lambda: c.curtain_arrow(0, 1))
+        add("Up", lambda: c.curtain_arrow(0, -1))
+        add("Right", lambda: c.curtain_arrow(1, 0))
+        add("Left", lambda: c.curtain_arrow(-1, 0))
+        add("X", lambda: c.start_crop())
+        add("Ctrl+Alt+R", lambda: c.start_crop())
+        add("Ctrl+Alt+K", c.toggle_show_keys)
         add("PgDown", c.next_page)
         add("PgUp", c.prev_page)
         add("N", c.new_page)
@@ -631,6 +700,9 @@ class Toolbar(QWidget):
             self.more_shapes_btn.setIcon(icons.icon(TOOL_SPECS[c.extra_shape].icon if c.tool in EXTRA_SHAPES
                                                     else "shapes_more"))
             self.stamp_btn.setChecked(c.tool == Tool.STAMP)
+            self.note_btn.setChecked(c.tool == Tool.NOTE)
+            self.keys_btn.setChecked(c.show_keys)
+            self.touch_btn.setChecked(c.touch_mode)
             self.stamp_btn.setIcon(icons.icon("stamp_" + c.stamp_kind if c.tool == Tool.STAMP else "stamp"))
             self.mode_btn.setChecked(c.drawing)
             self.mode_btn.setText("Dibujando" if c.drawing else "Ratón libre")
@@ -643,7 +715,7 @@ class Toolbar(QWidget):
             self.fill_btn.setChecked(c.fill_shapes)
             self.recognize_btn.setVisible(c.tool in RECOGNIZABLE_TOOLS)
             self.recognize_btn.setChecked(c.recognize_shapes)
-            self.bold_btn.setVisible(c.tool == Tool.TEXT)
+            self.bold_btn.setVisible(c.tool in (Tool.TEXT, Tool.NOTE))
             self.bold_btn.setChecked(c.text_bold)
 
             col = c.color
@@ -653,10 +725,11 @@ class Toolbar(QWidget):
 
             self.size_slider.setRange(spec.min_size, spec.max_size)
             self.size_slider.setValue(int(c.size_for(c.tool)))
-            what = {Tool.TEXT: "Letra", Tool.LASER: "Tamaño", Tool.STAMP: "Tamaño"}.get(c.tool, "Grosor")
+            what = {Tool.TEXT: "Letra", Tool.NOTE: "Letra", Tool.LASER: "Tamaño",
+                    Tool.STAMP: "Tamaño"}.get(c.tool, "Grosor")
             self.size_label.setText(f"{what}: {int(c.size_for(c.tool))} px")
             self.size_label.setToolTip(spec.label)
-            sized = c.tool != Tool.SELECT  # seleccionar no tiene grosor
+            sized = c.tool not in UNSIZED_TOOLS  # seleccionar y tapar zona no tienen grosor
             self.size_label.setVisible(sized)
             self.size_slider.setVisible(sized)
 

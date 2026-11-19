@@ -457,6 +457,98 @@ def _shapes_magic(p, c):
     p.drawLine(QPointF(7, 15.5), QPointF(8.3, 14))
 
 
+def _note(p, c):
+    """Nota adhesiva: papel amarillo con la esquina doblada y renglones."""
+    paper = QPainterPath()
+    paper.moveTo(4, 4)
+    paper.lineTo(20, 4)
+    paper.lineTo(20, 15)
+    paper.lineTo(15, 20)
+    paper.lineTo(4, 20)
+    paper.closeSubpath()
+    p.setPen(_pen(c, 1.3))
+    p.setBrush(QColor(255, 225, 90))
+    p.drawPath(paper)
+    p.setBrush(QColor(200, 165, 40))
+    p.drawPolygon(_poly((20, 15), (15, 15), (15, 20)))
+    p.setPen(_pen(QColor(90, 70, 20), 1.3))
+    p.drawLine(QPointF(7, 9), QPointF(17, 9))
+    p.drawLine(QPointF(7, 12.5), QPointF(14, 12.5))
+
+
+def _cover(p, c):
+    """Tapar zona: rectángulo oscuro con un signo de interrogación sobre unas líneas de texto."""
+    p.setPen(_pen(c, 1.4))
+    for y in (5, 9, 19):
+        p.drawLine(QPointF(3, y), QPointF(21, y))
+    p.setPen(_pen(c, 1.2))
+    p.setBrush(QColor(80, 140, 230))
+    p.drawRoundedRect(QRectF(6, 11, 13, 6.5), 1.5, 1.5)
+    f = QFont()
+    f.setPixelSize(6)
+    f.setBold(True)
+    p.setFont(f)
+    p.setPen(QColor(255, 255, 255))
+    p.drawText(QRectF(6, 11, 13, 6.5), Qt.AlignmentFlag.AlignCenter, "?")
+
+
+def _crop(p, c):
+    """Recortar zona: dos escuadras cruzadas con un rectángulo discontinuo."""
+    p.setPen(_pen(c, 2.0))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawPolyline(_poly((6, 2), (6, 18), (22, 18)))
+    p.drawPolyline(_poly((2, 6), (18, 6), (18, 22)))
+    pen = _pen(QColor(80, 140, 230), 1.2)
+    pen.setStyle(Qt.PenStyle.DashLine)
+    p.setPen(pen)
+    p.drawRect(QRectF(8.5, 8.5, 7, 7))
+
+
+def _keys(p, c):
+    """Mostrar teclas: dos teclas con «Ctrl» y «C»."""
+    p.setPen(_pen(c, 1.3))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawRoundedRect(QRectF(1.5, 7, 12, 10), 2, 2)
+    p.drawRoundedRect(QRectF(15.5, 7, 7, 10), 2, 2)
+    f = QFont()
+    f.setPixelSize(5)
+    f.setBold(True)
+    p.setFont(f)
+    p.drawText(QRectF(1.5, 7, 12, 10), Qt.AlignmentFlag.AlignCenter, "Ctrl")
+    f.setPixelSize(6)
+    p.setFont(f)
+    p.drawText(QRectF(15.5, 7, 7, 10), Qt.AlignmentFlag.AlignCenter, "C")
+    p.setPen(_pen(QColor(255, 186, 0), 1.3))
+    p.drawLine(QPointF(14.5, 4), QPointF(14.5, 5.5))
+    p.drawLine(QPointF(10, 3.5), QPointF(11, 5))
+    p.drawLine(QPointF(19, 3.5), QPointF(18, 5))
+
+
+def _touch(p, c):
+    """Modo táctil: mano con el índice extendido y ondas del toque."""
+    p.setPen(_pen(QColor(80, 140, 230), 1.3))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawArc(QRectF(6, 1, 8, 8), 20 * 16, 140 * 16)
+    p.drawArc(QRectF(3.5, -1.5, 13, 13), 25 * 16, 130 * 16)
+    hand = QPainterPath()
+    hand.moveTo(8.5, 22)
+    hand.lineTo(6.2, 15.5)
+    hand.quadTo(5.6, 13.6, 7.3, 13.4)
+    hand.lineTo(8.8, 15.2)
+    hand.lineTo(8.8, 6.6)
+    hand.quadTo(10, 4.8, 11.2, 6.6)
+    hand.lineTo(11.2, 11.5)
+    hand.quadTo(12.5, 10.5, 13.7, 12)
+    hand.quadTo(15, 11, 16.2, 12.6)
+    hand.quadTo(17.6, 12, 18.6, 13.6)
+    hand.lineTo(18.6, 18)
+    hand.lineTo(17, 22)
+    hand.closeSubpath()
+    p.setPen(_pen(c, 1.3))
+    p.setBrush(QColor(30, 32, 37))
+    p.drawPath(hand)
+
+
 _ICONS = {
     "brush": _brush, "pencil": _pencil, "pen": _pen_nib, "highlighter": _highlighter,
     "eraser": _eraser, "rect": _rect, "ellipse": _ellipse, "triangle": _triangle,
@@ -467,6 +559,7 @@ _ICONS = {
     "page_add": _page_add, "file": _file, "save": _save, "pdf": _pdf, "bold": _bold, "chevron_up": _chevron_up, "chevron_down": _chevron_down,
     "shapes_more": _shapes_more, "stamp": _stamp, "templates": _templates,
     "select": _select, "timer": _timer, "paste": _paste, "shapes_magic": _shapes_magic,
+    "note": _note, "cover": _cover, "crop": _crop, "keys": _keys, "touch": _touch,
 }
 for _name in ("pentagon", "hexagon", "octagon", "diamond", "star", "rounded_rect", "axes", "double_arrow",
               "curved_arrow", "brace"):
@@ -490,6 +583,21 @@ def icon_pixmap(name: str, color: str = FG, size: int = 24, scale: int = 3) -> Q
 @lru_cache(maxsize=None)
 def icon(name: str, color: str = FG) -> QIcon:
     return QIcon(icon_pixmap(name, color))
+
+
+@lru_cache(maxsize=None)
+def swatch_icon(rgba: tuple) -> QIcon:
+    """Muestra de color (p. ej. el papel de una nota adhesiva) para los menús."""
+    pm = QPixmap(48, 48)
+    pm.fill(Qt.GlobalColor.transparent)
+    pm.setDevicePixelRatio(2)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    p.setPen(QPen(QColor(0, 0, 0, 110), 1))
+    p.setBrush(QColor(*rgba))
+    p.drawRoundedRect(QRectF(3, 3, 18, 18), 3, 3)
+    p.end()
+    return QIcon(pm)
 
 
 def app_icon_image(size: int = 256) -> QImage:

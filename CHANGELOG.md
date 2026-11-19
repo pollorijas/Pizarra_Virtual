@@ -9,6 +9,48 @@ incompatibles.
 Cada versión publicada debe tener su sección aquí: el flujo de publicación de GitHub Actions se
 detiene si falta.
 
+## [1.5.0] - 2026-11-19
+
+### Añadido
+- **Cortina desde cualquier lado**: además de bajar desde arriba, ahora se descubre desde abajo,
+  desde la izquierda o desde la derecha.
+  - El botón de la cortina abre un menú con los cuatro lados y la opción de quitarla.
+  - **V** pone o quita la cortina (recuerda el último lado) y **Mayús+V** pasa al lado siguiente.
+  - Se descubre arrastrando su borde o con las flechas en su dirección (↓ con la de arriba,
+    → con la de la izquierda…); la flecha contraria vuelve a tapar.
+- **Tapar zona** (tecla **H**, botón en «Presentación»): arrastrar tapa una parte de la pantalla
+  con un rectángulo oscuro con «?», por ejemplo las respuestas de un ejercicio. Un clic sobre él
+  la descubre. Se puede deshacer, mover con Seleccionar, y se guarda en la sesión.
+- **Notas adhesivas** (tecla **O**, botón de la nota): un clic pega una nota de papel de color
+  donde se escribe como con Texto; crece con lo escrito.
+  - Seis colores de papel (amarilla, rosada, celeste, verde, naranja y blanca) en el menú del botón.
+  - Un clic sobre una nota la vuelve a abrir para editarla; se mueve, se duplica y se guarda en la
+    sesión y en el PDF.
+- **Recortar zona** (tecla **X**, **Ctrl+Alt+R** desde cualquier aplicación, o el menú de la
+  cámara): la pantalla se congela y se arrastra un rectángulo.
+  - Se guarda solo esa parte en la carpeta de capturas y se copia al portapapeles, con o sin lo
+    dibujado.
+  - «Recortar zona y pegarla en la pizarra» la deja como imagen en el mismo lugar, lista para
+    moverla o agrandarla.
+  - Con el zoom activo se recorta la vista ampliada. Esc o clic derecho cancelan.
+- **Mostrar teclas pulsadas** (botón del teclado en «Presentación», **Ctrl+Alt+K**): los atajos
+  que se pulsan en cualquier programa (Ctrl + C, Alt + Tab, Win + D…) y las teclas especiales
+  (Intro, Esc, Tab, flechas, F1…F12, Supr) aparecen abajo en el centro de la pantalla y se
+  desvanecen. Si se repiten, muestran «×2», «×3». Por privacidad, el texto que se escribe nunca se
+  muestra.
+- **Pantalla táctil**:
+  - Un dedo dibuja; un toque con **dos dedos** deshace y uno con **tres dedos** rehace.
+  - Con el zoom activo, pellizcar acerca o aleja y mueve la vista.
+  - Si la pantalla informa el tamaño del contacto, apoyar la **palma** borra.
+- **Modo táctil** (botón de la mano en la cabecera de la barra, o el menú de la bandeja): botones,
+  letras, menús y deslizadores más grandes, y zonas de agarre más anchas. Sirve también en
+  pantallas sin tacto, por ejemplo un proyector manejado de lejos. Se activa solo la primera vez
+  si Windows detecta una pantalla táctil, y se recuerda.
+
+### Cambiado
+- El temporizador pasa a la sección «Presentación» de la barra.
+- Las flechas ← → también mueven la cortina cuando se descubre desde un lado.
+
 ## [1.4.0] - 2026-11-19
 
 ### Añadido

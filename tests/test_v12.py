@@ -178,19 +178,19 @@ def test_curtain_covers_reveals_and_drags(ctrl, qapp):
     ov = _ov(ctrl)
     _cursor_to(ov, 100, 100)
     QTest.keyClick(ctrl.toolbar, Qt.Key.Key_V)  # atajo V
-    assert ctrl.curtain_active and ov.curtain_y == 0
+    assert ctrl.curtain_active and ov.curtain == 0
     img = _grab(ov)
     assert _px(ov, img, 200, 200).alpha() == 255
     QTest.keyClick(ctrl.toolbar, Qt.Key.Key_Down)
     QTest.keyClick(ctrl.toolbar, Qt.Key.Key_Down)
-    assert math.isclose(ov.curtain_y, ov.height() * 0.2)
+    assert math.isclose(ov.curtain, ov.height() * 0.2)
     QTest.keyClick(ctrl.toolbar, Qt.Key.Key_Up)
-    assert math.isclose(ov.curtain_y, ov.height() * 0.1)
+    assert math.isclose(ov.curtain, ov.height() * 0.1)
     # arrastrar la cortina (no dibuja)
-    y0 = ov.curtain_y
+    y0 = ov.curtain
     ctrl.set_tool(Tool.BRUSH)
     _drag(ov, [(200, int(y0) + 60), (200, int(y0) + 160)])
-    assert math.isclose(ov.curtain_y, y0 + 100, abs_tol=1)
+    assert math.isclose(ov.curtain, y0 + 100, abs_tol=1)
     assert not ctrl.history
     # por encima de la cortina se sigue dibujando
     _drag(ov, [(100, 20), (200, 20)])

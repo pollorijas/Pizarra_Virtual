@@ -80,6 +80,24 @@ def mouse_buttons() -> tuple[bool, bool]:
     return bool(_user32.GetAsyncKeyState(left_vk) & 0x8000), bool(_user32.GetAsyncKeyState(right_vk) & 0x8000)
 
 
+def pressed_keys(vks) -> set[int]:
+    """Teclas (códigos virtuales) que están pulsadas ahora mismo, en cualquier aplicación."""
+    if not IS_WINDOWS:
+        return set()
+    state = _user32.GetAsyncKeyState
+    return {vk for vk in vks if state(vk) & 0x8000}
+
+
+def has_touch_screen() -> bool:
+    """¿Hay una pantalla táctil conectada? (SM_DIGITIZER indica entrada táctil integrada o externa)."""
+    if not IS_WINDOWS:
+        return False
+    try:
+        return bool(_user32.GetSystemMetrics(94) & 0xC0)  # NID_INTEGRATED_TOUCH | NID_EXTERNAL_TOUCH
+    except Exception:  # pragma: no cover
+        return False
+
+
 def open_file(path: str) -> None:
     if IS_WINDOWS:
         os.startfile(path)  # type: ignore[attr-defined]  # noqa: S606

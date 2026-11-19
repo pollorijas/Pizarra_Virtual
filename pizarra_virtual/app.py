@@ -14,19 +14,20 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QAction, QColor, QCursor, QGuiApplication, QImage
 from PySide6.QtWidgets import QApplication, QFileDialog, QInputDialog, QMenu, QMessageBox, QSystemTrayIcon
 
-from . import __version__, capture, icons, session, winutil
+from . import __version__, capture, icons, keyview, session, winutil
 from .hotkeys import MOD_ALT, MOD_CONTROL, MOD_SHIFT, GlobalHotkeys
 from . import templates
 from .items import (
-    ClearItem, DeleteItem, DuplicateItem, ImageItem, StampItem, TextEditItem, TextItem, TransformItem, flatten,
+    ClearItem, DeleteItem, DuplicateItem, ImageItem, NoteItem, StampItem, TextEditItem, TextItem, TransformItem,
+    flatten,
 )
 from .timer import TimerWindow
 from .overlay import Overlay, make_stamp_cursor, make_tool_cursor, now_ms
 from .session import Page
 from .toolbar import Toolbar
 from .tools import (
-    BACKGROUNDS, BRUSH_LABELS, DEFAULT_COLOR, EXTRA_SHAPES, PATTERNS, POLYGON_SIDES, STAMPS, TOOL_SPECS, BrushType,
-    Tool,
+    BACKGROUNDS, BRUSH_LABELS, CURTAIN_SIDES, DEFAULT_COLOR, EXTRA_SHAPES, NOTE_COLORS, PATTERNS, POLYGON_SIDES,
+    STAMPS, TOOL_SPECS, BrushType, Tool,
 )
 
 log = logging.getLogger(__name__)
@@ -34,7 +35,8 @@ log = logging.getLogger(__name__)
 CAPTURE_DELAY_MS = 250  # tiempo para que Windows retire la superposición antes de capturar
 EFFECTS_INTERVAL_MS = 16
 
-VK_D, VK_F, VK_H, VK_M, VK_S, VK_Z = 0x44, 0x46, 0x48, 0x4D, 0x53, 0x5A
+VK_D, VK_F, VK_H, VK_K, VK_M, VK_R, VK_S, VK_Z = 0x44, 0x46, 0x48, 0x4B, 0x4D, 0x52, 0x53, 0x5A
+TOUCH_SCALE = 1.45  # tamaño de los botones y zonas de agarre en el modo táctil
 
 SPOTLIGHT_MIN, SPOTLIGHT_MAX, SPOTLIGHT_DEFAULT = 60, 600, 170
 SPOTLIGHT_SHAPES = {"circle": "Círculo", "rect": "Rectángulo"}
@@ -94,6 +96,11 @@ class Controller(QObject):
         self.extra_shape = Tool.HEXAGON  # última figura elegida en «Más figuras»
         self.spotlight_radius = SPOTLIGHT_DEFAULT
         self.spotlight_shape = "circle"  # "circle" o "rect" (franja, p. ej. para leer línea a línea)
+        self.note_color = "yellow"  # papel de las notas adhesivas nuevas
+        self.curtain_side = "top"  # lado desde el que se descubre la cortina
+        self.show_keys = False  # mostrar en pantalla los atajos de teclado que se pulsan
+        # Modo táctil: barra con botones grandes. Por defecto, activo si hay pantalla táctil.
+        self.touch_mode = winutil.has_touch_screen()
         self._load_settings()
 
         # Estado de la aplicación
@@ -114,6 +121,9 @@ class Controller(QObject):
         self._fx_timer.timeout.connect(self._tick)
         self._prev_buttons = (False, False)
         self.button_state = self._system_buttons
+        self.key_state = lambda: winutil.pressed_keys(keyview.KEYS)  # teclas pulsadas (se sustituye en pruebas)
+        self._key_watcher = keyview.KeyWatcher()
+        self._crop: dict | None = None  # recorte en curso: destino y estado a restaurar
 
         self.toolbar = Toolbar(self)
         self.hotkeys = GlobalHotkeys(self) if enable_hotkeys else None
@@ -215,6 +225,8 @@ class Controller(QObject):
              lambda: self.capture(with_drawing=False)),
             (MOD_CONTROL | MOD_ALT, VK_F, "Ctrl+Alt+F", self.toggle_spotlight),
             (MOD_CONTROL | MOD_ALT, VK_M, "Ctrl+Alt+M", self.toggle_highlight),
+            (MOD_CONTROL | MOD_ALT, VK_K, "Ctrl+Alt+K", self.toggle_show_keys),
+            (MOD_CONTROL | MOD_ALT, VK_R, "Ctrl+Alt+R", lambda: self.start_crop()),
         ]
         return [label for mods, vk, label, fn in combos if not self.hotkeys.register(mods, vk, fn)]
 
@@ -352,6 +364,23 @@ class Controller(QObject):
         return StampItem(self.stamp_kind, self.color.getRgb(), float(self.sizes[Tool.STAMP]),
                          self.opacities[Tool.STAMP] / 100.0, x, y, label)
 
+    @property
+    def note_rgba(self) -> tuple:
+        return NOTE_COLORS.get(self.note_color, NOTE_COLORS["yellow"])[1]
+
+    def set_note_color(self, key: str) -> None:
+        """Elige el papel de las notas (y cambia el de la nota que se está escribiendo)."""
+        if key not in NOTE_COLORS:
+            return
+        self.note_color = key
+        ed = self.text_editor
+        if ed is not None and isinstance(ed.editing_text, NoteItem):
+            ed.editing_text.color = self.note_rgba
+            ed.restyle_text(self.color.getRgb(), ed.editing_text.size, ed.editing_text.bold)
+        elif self.tool != Tool.NOTE:
+            self.set_tool(Tool.NOTE)
+        self._changed()
+
     def insert_template(self, key: str) -> None:
         """Inserta una plantilla centrada en la pantalla donde está el cursor (un solo paso de deshacer)."""
         if key not in templates.TEMPLATES:
@@ -421,18 +450,35 @@ class Controller(QObject):
         self._restyle_text()
         self._changed()
 
+    def _text_tool_for(self, item) -> Tool:
+        """Herramienta cuyo tamaño de letra se usa con ese texto (Texto o Nota adhesiva)."""
+        if self.tool in (Tool.TEXT, Tool.NOTE):
+            return self.tool
+        return Tool.NOTE if isinstance(item, NoteItem) else Tool.TEXT
+
     def _restyle_text(self) -> None:
-        if self.text_editor is not None:
-            self.text_editor.restyle_text(self.color.getRgb(), float(self.sizes[Tool.TEXT]), self.text_bold,
-                                          self.opacities[Tool.TEXT] / 100.0)
+        ed = self.text_editor
+        if ed is not None and ed.editing_text is not None:
+            tool = self._text_tool_for(ed.editing_text)
+            ed.restyle_text(self.color.getRgb(), float(self.sizes[tool]), self.text_bold,
+                            self.opacities[Tool.TEXT] / 100.0)
 
     def adopt_text_style(self, item) -> None:
-        """Al abrir un texto ya escrito, la barra muestra su color, tamaño, opacidad y negrita."""
-        spec = TOOL_SPECS[Tool.TEXT]
-        self.color = QColor(*item.rgba[:3])
-        self.sizes[Tool.TEXT] = max(spec.min_size, min(spec.max_size, int(round(item.size))))
-        self.opacities[Tool.TEXT] = max(5, min(100, int(round(item.opacity * 100))))
+        """Al abrir un texto ya escrito, la barra muestra su color, tamaño, opacidad y negrita.
+
+        En una nota adhesiva solo se adoptan el tamaño y la negrita (la letra es siempre oscura).
+        """
+        tool = self._text_tool_for(item)
+        spec = TOOL_SPECS[tool]
+        self.sizes[tool] = max(spec.min_size, min(spec.max_size, int(round(item.size))))
         self.text_bold = bool(item.bold)
+        if isinstance(item, NoteItem):
+            key = next((k for k, (_l, rgba) in NOTE_COLORS.items() if tuple(rgba) == tuple(item.color)), None)
+            if key:
+                self.note_color = key
+        else:
+            self.color = QColor(*item.rgba[:3])
+            self.opacities[Tool.TEXT] = max(5, min(100, int(round(item.opacity * 100))))
         self._changed(cursor=True)
 
     # ---- fondo y pauta (de la página actual)
@@ -546,8 +592,10 @@ class Controller(QObject):
         self._changed()
 
     def escape(self) -> None:
-        """Esc: primero sale del zoom o quita la selección; si no, pasa a «Ratón libre»."""
-        if self.zoom_active:
+        """Esc: cancela el recorte, sale del zoom o quita la selección; si no, pasa a «Ratón libre»."""
+        if self.crop_active:
+            self.cancel_crop()
+        elif self.zoom_active:
             self.exit_zoom()
         elif self.has_selection:
             for ov in self.overlays.values():
@@ -586,7 +634,8 @@ class Controller(QObject):
 
     @property
     def needs_effects(self) -> bool:
-        return self.spotlight or self.highlight or (self.tool == Tool.LASER and self.drawing and self.visible)
+        return (self.spotlight or self.highlight or self.show_keys
+                or (self.tool == Tool.LASER and self.drawing and self.visible))
 
     def ensure_ticking(self) -> None:
         if not self._fx_timer.isActive():
@@ -611,6 +660,13 @@ class Controller(QObject):
         if right and not self._prev_buttons[1]:
             clicks.append("right")
         self._prev_buttons = (left, right)
+        if self.show_keys:
+            keys = self._key_watcher.update(self.key_state())
+            if keys:
+                ov = self.overlay_for_screen(self.current_screen())
+                if ov is not None:
+                    for label in keys:
+                        ov.show_key(label, now)
         animating = False
         for ov in self.overlays.values():
             if ov.isVisible():
@@ -647,27 +703,108 @@ class Controller(QObject):
                 ov.clear_ripples()
         self._changed(repaint=True)
 
+    # ---- modo táctil
+
+    @property
+    def touch_scale(self) -> float:
+        return TOUCH_SCALE if self.touch_mode else 1.0
+
+    def set_touch_mode(self, on: bool) -> None:
+        """Modo táctil: barra con botones, letras y menús más grandes, y zonas de agarre más anchas.
+
+        Los gestos (dos dedos: deshacer, tres: rehacer, pellizcar con zoom) funcionan siempre.
+        La barra se reconstruye a su nuevo tamaño (después de terminar el clic que lo pidió).
+        """
+        on = bool(on)
+        if on == self.touch_mode:
+            return
+        self.touch_mode = on
+        QTimer.singleShot(0, self._rebuild_toolbar)
+        self._changed(cursor=True, repaint=True)
+
+    def toggle_touch_mode(self) -> None:
+        self.set_touch_mode(not self.touch_mode)
+
+    def _rebuild_toolbar(self) -> None:
+        if self._shutting_down:
+            return
+        old = self.toolbar
+        visible = old.isVisible()
+        old.save_position()
+        self.state_changed.disconnect(old.sync)
+        old.hide()
+        old.deleteLater()  # (sin close(): cerrar la barra cerraría el programa)
+        self.toolbar = Toolbar(self)
+        self.state_changed.connect(self.toolbar.sync)
+        self.toolbar.restore_position()
+        if visible:
+            self.toolbar.show()
+            self._raise_toolbar(activate=self.drawing)
+        self._changed()
+
+    def toggle_show_keys(self) -> None:
+        """Mostrar en pantalla los atajos y teclas especiales que se pulsan (Ctrl + C, Alt + Tab…)."""
+        self.show_keys = not self.show_keys
+        self._key_watcher.reset()
+        if not self.show_keys:
+            for ov in self.overlays.values():
+                ov.clear_keys()
+        elif not self.visible:
+            self._set_visible(True)
+        self._changed()
+
     @property
     def curtain_active(self) -> bool:
-        return any(ov.curtain_y is not None for ov in self.overlays.values())
+        return any(ov.curtain is not None for ov in self.overlays.values())
 
     def toggle_curtain(self) -> None:
-        """Cortina sobre la pantalla del cursor; se descubre arrastrándola o con ↓ / ↑."""
+        """Cortina sobre la pantalla del cursor; se descubre arrastrándola o con las flechas."""
         if self.curtain_active:
             for ov in self.overlays.values():
                 ov.set_curtain(None)
+            self._changed()
         else:
-            if not self.visible:
-                self._set_visible(True)
-            ov = self.overlay_for_screen(self.current_screen()) or next(iter(self.overlays.values()), None)
-            if ov is not None:
-                ov.set_curtain(0)
+            self.show_curtain(self.curtain_side)
+
+    def show_curtain(self, side: str) -> None:
+        """Tapa la pantalla del cursor con una cortina que se descubre desde ``side``.
+
+        Si ya había una cortina, empieza de nuevo (toda tapada) desde ese lado.
+        """
+        if side not in CURTAIN_SIDES:
+            return
+        self.curtain_side = side
+        if not self.visible:
+            self._set_visible(True)
+        current = next((ov for ov in self.overlays.values() if ov.curtain is not None), None)
+        ov = current or self.overlay_for_screen(self.current_screen()) or next(iter(self.overlays.values()), None)
+        if ov is not None:
+            ov.set_curtain(0, side)
         self._changed()
 
+    def cycle_curtain_side(self) -> None:
+        """Mayús+V: la cortina pasa a descubrirse desde el lado siguiente."""
+        order = list(CURTAIN_SIDES)
+        self.show_curtain(order[(order.index(self.curtain_side) + 1) % len(order)])
+
     def curtain_step(self, direction: int) -> None:
+        """Descubre (+1) o vuelve a tapar (-1) una décima parte de la pantalla."""
         for ov in self.overlays.values():
-            if ov.curtain_y is not None:
-                ov.set_curtain(ov.curtain_y + direction * ov.height() * 0.1)
+            if ov.curtain is not None:
+                ext = ov.height() if ov.curtain_side in ("top", "bottom") else ov.width()
+                ov.set_curtain(ov.curtain + direction * ext * 0.1)
+
+    def curtain_arrow(self, dx: int, dy: int) -> None:
+        """Las flechas mueven el borde de la cortina en su dirección (↓ con la de arriba descubre)."""
+        for ov in self.overlays.values():
+            if ov.curtain is None:
+                continue
+            side = ov.curtain_side
+            if side in ("top", "bottom") and dy:
+                self.curtain_step(dy if side == "top" else -dy)
+            elif side in ("left", "right") and dx:
+                self.curtain_step(dx if side == "left" else -dx)
+            return
 
     # ================================================================== zoom
 
@@ -719,6 +856,122 @@ class Controller(QObject):
                 self._raise_toolbar(activate=self.drawing)
             self._capturing = False
             self._changed(cursor=True)
+
+    # ================================================================== recortar zona
+
+    @property
+    def crop_active(self) -> bool:
+        return any(ov.crop_active for ov in self.overlays.values())
+
+    def start_crop(self, with_drawing: bool = True, to_board: bool = False) -> None:
+        """Congela la pantalla del cursor para recortar una zona arrastrando un rectángulo.
+
+        La zona se guarda en la carpeta de capturas y se copia al portapapeles, o, con
+        ``to_board``, se pega en la pizarra como imagen (en el mismo lugar, lista para moverla).
+        """
+        if self._capturing or self.crop_active:
+            return
+        screen = self.current_screen()
+        ov = self.overlay_for_screen(screen)
+        if ov is None:
+            return
+        self._capturing = True
+        self._finish_all()
+        restore = {"drawing": self.drawing, "visible": self.visible, "to_board": to_board}
+        if ov.zoom_active:  # se recorta lo que se ve ampliado
+            shot = ov.render_view(with_drawing)
+            ov.end_zoom()
+            self._begin_crop(ov, shot, restore)
+            self._capturing = False
+            return
+        sheet = self.sheet_visible
+        toolbar_visible = self.toolbar.isVisible()
+        self.toolbar.hide()
+        self._hide_timer_for_grab()
+        for o in self.overlays.values():
+            o.hide()
+        QTimer.singleShot(CAPTURE_DELAY_MS, lambda: self._do_start_crop(screen, ov, with_drawing, sheet, restore,
+                                                                        toolbar_visible))
+
+    def _do_start_crop(self, screen, ov: Overlay, with_drawing: bool, sheet: bool, restore: dict,
+                       toolbar_visible: bool) -> None:
+        try:
+            shot = capture.grab_screen(screen)
+            if shot.isNull():
+                raise OSError("No se pudo capturar la pantalla")
+            if with_drawing:
+                shot = capture.compose_drawing(shot, ov.canvas,
+                                               self.background_color(interactive=False) if sheet
+                                               else QColor(0, 0, 0, 0),
+                                               ov.pattern_image() if sheet else None)
+            self._begin_crop(ov, shot, restore)
+        except Exception as exc:  # pragma: no cover - errores del sistema
+            log.exception("No se pudo iniciar el recorte")
+            self.notify("Error al recortar", str(exc), error=True)
+            self._crop = None
+        finally:
+            for o in self.overlays.values():
+                if self.visible:
+                    o.show()
+                    o.apply_input_mode()
+            self._restore_timer_after_grab()
+            if toolbar_visible or self.drawing:
+                self._raise_toolbar(activate=True)
+            self._capturing = False
+            self._changed(cursor=True)
+
+    def _begin_crop(self, ov: Overlay, shot: QImage, restore: dict) -> None:
+        self._crop = restore
+        self.visible = True
+        self.drawing = True  # la pizarra recibe el ratón mientras se elige la zona
+        ov.show()
+        ov.apply_input_mode()
+        ov.start_crop(shot)
+        self._raise_toolbar(activate=True)  # Esc (en la barra) cancela el recorte
+        self._changed()
+
+    def cancel_crop(self) -> None:
+        for ov in self.overlays.values():
+            if ov.crop_active:
+                self.crop_finished(ov, None)
+
+    def crop_finished(self, ov: Overlay, rect: QRectF | None) -> None:
+        """Lo llama la pizarra al soltar el rectángulo (o con None si se cancela)."""
+        state = self._crop or {"drawing": True, "visible": True, "to_board": False}
+        img = ov.crop_image(rect) if rect is not None else QImage()
+        ov.end_crop()
+        self._crop = None
+        if rect is None or img.isNull():
+            self._restore_after_crop(state)
+            return
+        if state["to_board"]:
+            # Se pega donde estaba, a su tamaño en pantalla, y queda seleccionada para moverla
+            buf = QBuffer()
+            buf.open(QIODevice.OpenModeFlag.WriteOnly)
+            img.save(buf, "PNG")
+            item = ImageItem(bytes(buf.data()), rect.x(), rect.y(), rect.width(), rect.height())
+            self.push(ov.key, item)
+            ov.apply_item(item)
+            self.set_tool(Tool.SELECT)
+            ov.set_selection([item.uid])
+            self.notify("Zona pegada en la pizarra", "Arrástrala para moverla; la esquina cambia su tamaño.")
+            return
+        try:
+            path = capture.save_capture(img)
+            self.last_capture = path
+            QGuiApplication.clipboard().setImage(img)
+            self.notify("Recorte guardado", f"{path}\n(También se copió al portapapeles)")
+        except Exception as exc:  # pragma: no cover - errores de E/S del sistema
+            log.exception("No se pudo guardar el recorte")
+            self.notify("Error al recortar", str(exc), error=True)
+        self._restore_after_crop(state)
+
+    def _restore_after_crop(self, state: dict) -> None:
+        if not state["visible"]:
+            self.toggle_visible()
+        elif not state["drawing"]:
+            self.set_drawing(False)
+        self._changed(cursor=True)
 
     def exit_zoom(self) -> None:
         for ov in self.overlays.values():
@@ -1073,6 +1326,16 @@ class Controller(QObject):
 
     def build_capture_menu(self, parent, icon_color: str = icons.FG) -> QMenu:
         menu = QMenu(parent)
+        crops = [
+            ("crop", "Recortar zona (con lo dibujado)\tX · Ctrl+Alt+R", True, False),
+            ("crop", "Recortar zona sin lo dibujado", False, False),
+            ("paste", "Recortar zona y pegarla en la pizarra", False, True),
+        ]
+        for icon_name, text, with_drawing, to_board in crops:
+            act = QAction(icons.icon(icon_name, icon_color), text, menu)
+            act.triggered.connect(lambda _=False, w=with_drawing, b=to_board: self.start_crop(w, b))
+            menu.addAction(act)
+        menu.addSeparator()
         opts = [
             ("Pantalla actual con trazado\tCtrl+Alt+S", True, False),
             ("Pantalla actual sin trazado\tCtrl+Alt+Shift+S", False, False),
@@ -1195,7 +1458,12 @@ class Controller(QObject):
         self._tray_spot_rect.triggered.connect(lambda on: self.set_spotlight_shape("rect" if on else "circle"))
         self._tray_highlight = QAction("Resaltar cursor y clics\tCtrl+Alt+M", menu, checkable=True)
         self._tray_highlight.triggered.connect(lambda _c: self.toggle_highlight())
-        for act in (self._tray_draw, self._tray_visible, self._tray_spot, self._tray_spot_rect, self._tray_highlight):
+        self._tray_keys = QAction("Mostrar teclas pulsadas\tCtrl+Alt+K", menu, checkable=True)
+        self._tray_keys.triggered.connect(lambda _c: self.toggle_show_keys())
+        self._tray_touch = QAction("Modo táctil (botones grandes)", menu, checkable=True)
+        self._tray_touch.triggered.connect(lambda c: self.set_touch_mode(c))
+        for act in (self._tray_draw, self._tray_visible, self._tray_spot, self._tray_spot_rect, self._tray_highlight,
+                    self._tray_keys, self._tray_touch):
             menu.addAction(act)
         zoom_act = QAction("Zoom de pantalla\tCtrl+Alt+Z", menu)
         zoom_act.triggered.connect(self.toggle_zoom)
@@ -1235,6 +1503,8 @@ class Controller(QObject):
         self._tray_spot.setChecked(self.spotlight)
         self._tray_spot_rect.setChecked(self.spotlight_shape == "rect")
         self._tray_highlight.setChecked(self.highlight)
+        self._tray_keys.setChecked(self.show_keys)
+        self._tray_touch.setChecked(self.touch_mode)
 
     def _on_tray_activated(self, reason) -> None:
         if reason == QSystemTrayIcon.ActivationReason.Trigger:
@@ -1307,6 +1577,13 @@ class Controller(QObject):
                                                                                     SPOTLIGHT_DEFAULT))))
             shape = str(s.value("spotlight_shape", "circle"))
             self.spotlight_shape = shape if shape in SPOTLIGHT_SHAPES else "circle"
+            note = str(s.value("note_color", "yellow"))
+            self.note_color = note if note in NOTE_COLORS else "yellow"
+            side = str(s.value("curtain_side", "top"))
+            self.curtain_side = side if side in CURTAIN_SIDES else "top"
+            touch = s.value("touch_mode")
+            if touch is not None:  # si nunca se eligió, depende de si hay pantalla táctil
+                self.touch_mode = str(touch).lower() == "true"
         except Exception:  # ajustes corruptos: se usan los valores por defecto
             log.exception("Ajustes no válidos; se usan los valores por defecto")
 
@@ -1326,6 +1603,9 @@ class Controller(QObject):
         s.setValue("pattern", self.pattern)
         s.setValue("spotlight_radius", self.spotlight_radius)
         s.setValue("spotlight_shape", self.spotlight_shape)
+        s.setValue("note_color", self.note_color)
+        s.setValue("curtain_side", self.curtain_side)
+        s.setValue("touch_mode", "true" if self.touch_mode else "false")
         s.sync()
 
 
@@ -1341,6 +1621,8 @@ El <b>Manual de usuario</b> (PDF) explica todas las funciones.</p>
 <tr><td><b>Ctrl+Alt+Z</b></td><td>Zoom de la zona bajo el cursor</td></tr>
 <tr><td><b>Ctrl+Alt+F</b></td><td>Foco (oscurece todo menos el cursor)</td></tr>
 <tr><td><b>Ctrl+Alt+M</b></td><td>Resaltar el cursor y los clics</td></tr>
+<tr><td><b>Ctrl+Alt+K</b></td><td>Mostrar en pantalla los atajos que se pulsan</td></tr>
+<tr><td><b>Ctrl+Alt+R</b></td><td>Recortar una zona de la pantalla</td></tr>
 <tr><td><b>Ctrl+Alt+S</b> / <b>+Shift</b></td><td>Captura con / sin trazado</td></tr>
 <tr><td colspan="2"><br><b>Herramientas</b> (en modo dibujo)</td></tr>
 <tr><td><b>1</b> … <b>5</b></td><td>Pincel, Lápiz, Pluma, Destacador, Goma</td></tr>
@@ -1350,6 +1632,7 @@ El <b>Manual de usuario</b> (PDF) explica todas las funciones.</p>
 <tr><td><b>J</b> · <b>W</b> · <b>U</b> · <b>K</b></td><td>Ejes · Flecha doble · Flecha curva · Llave</td></tr>
 <tr><td><b>S</b></td><td>Sellos (otra vez S: siguiente sello) · Plantillas: botón de la barra</td></tr>
 <tr><td><b>A</b> · <b>G</b> · <b>Ctrl+V</b></td><td>Seleccionar y mover · Formas perfectas · Pegar imagen o texto</td></tr>
+<tr><td><b>O</b> · <b>H</b> · <b>X</b></td><td>Nota adhesiva · Tapar zona (clic: descubrir) · Recortar zona</td></tr>
 <tr><td><b>Ctrl+A</b> · <b>Ctrl+D</b> · <b>Supr</b></td><td>Seleccionar todo · Duplicar · Eliminar lo seleccionado</td></tr>
 <tr><td><b>B</b> · <b>R</b> · <b>C</b></td><td>Tipo de pincel · Relleno de figuras · Color</td></tr>
 <tr><td><b>+ / -</b> o rueda</td><td>Grosor (tamaño de letra con Texto)</td></tr>
@@ -1357,7 +1640,7 @@ El <b>Manual de usuario</b> (PDF) explica todas las funciones.</p>
 <tr><td><b>Ctrl+Z / Ctrl+Y</b> · <b>Supr</b></td><td>Deshacer / rehacer · Borrar la página</td></tr>
 <tr><td colspan="2"><br><b>Presentación</b></td></tr>
 <tr><td><b>F</b> · <b>V</b> · <b>M</b></td><td>Foco · Cortina · Resaltar cursor y clics</td></tr>
-<tr><td><b>↓ / ↑</b></td><td>Descubrir / cubrir con la cortina</td></tr>
+<tr><td><b>Mayús+V</b> · <b>flechas</b></td><td>Cortina desde otro lado · Mover el borde de la cortina</td></tr>
 <tr><td><b>Alt + rueda</b></td><td>Tamaño del foco</td></tr>
 <tr><td><b>Mayús+F</b></td><td>Foco en círculo o en rectángulo</td></tr>
 <tr><td><b>Z</b> · <b>Esc</b></td><td>Zoom · Salir del zoom o pasar a «Ratón libre»</td></tr>
@@ -1366,6 +1649,8 @@ El <b>Manual de usuario</b> (PDF) explica todas las funciones.</p>
 <tr><td><b>Ctrl+S</b> · <b>Ctrl+O</b> · <b>Ctrl+P</b></td><td>Guardar · Abrir sesión · Exportar a PDF</td></tr>
 <tr><td colspan="2"><br><b>Escribiendo texto</b>: Intro = nueva línea · Esc o clic fuera = terminar ·
 Ctrl+V = pegar · flechas, Inicio y Fin = mover el cursor<br>
+<b>Pantalla táctil</b>: un dedo dibuja · toque con dos dedos = deshacer · con tres = rehacer ·
+con zoom, pellizcar acerca y aleja<br>
 <b>Clic sobre un texto ya escrito</b> = editarlo (arrástralo para moverlo)</td></tr>
 </table>
 <p>Las capturas se guardan en:<br><code>{folder}</code></p>

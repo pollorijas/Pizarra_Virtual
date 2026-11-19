@@ -120,6 +120,21 @@ def render_all_tools():
     shape = recognize(circle)
     results["recognize:circle"] = int(shape is not None and shape.tool == Tool.ELLIPSE)
 
+    # Nota adhesiva, zona tapada y teclas en pantalla (v1.5)
+    from .items import CoverItem, NoteItem
+    from .keyview import KeyWatcher
+
+    for name, item in (("note", NoteItem((38, 50, 56, 255), 24, 1.0, 30, 30, "Nota")),
+                       ("cover", CoverItem(20, 20, 140, 90))):
+        img = blank()
+        p = QPainter(img)
+        render.draw_item(p, item)
+        p.end()
+        results[name] = painted(img)
+    watcher = KeyWatcher()
+    watcher.update({0x11})
+    results["keys:ctrl+c"] = int(watcher.update({0x11, 0x43}) == ["Ctrl + C"])
+
     # La goma debe borrar lo pintado
     img = blank()
     img.fill(Qt.GlobalColor.black)

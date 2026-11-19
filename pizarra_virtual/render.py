@@ -19,7 +19,7 @@ from PySide6.QtGui import (
     QBrush, QColor, QFont, QFontMetricsF, QImage, QPainter, QPainterPath, QPen, QPolygonF, QRadialGradient,
 )
 
-from .items import ClearItem, GroupItem, ImageItem, ShapeItem, StampItem, StrokeItem, TextItem
+from .items import ClearItem, CoverItem, GroupItem, ImageItem, NoteItem, ShapeItem, StampItem, StrokeItem, TextItem
 from .tools import FILLABLE_SHAPES, LINEAR_SHAPES, POLYGON_SIDES, BrushType, Tool
 
 NIB_ANGLE = math.radians(40)      # ángulo de la punta caligráfica
@@ -802,10 +802,59 @@ def ink_near(item, erasers, pos: QPointF, radius: float) -> bool:
 
 def text_hit_rect(item: TextItem) -> QRectF:
     """Zona donde un clic con la herramienta Texto abre ese texto para editarlo."""
+    if isinstance(item, NoteItem):
+        return note_rect(item)
     return text_box(item).adjusted(-6, -6, 6, 6)
 
 
+# --------------------------------------------------------------------------- notas adhesivas
+
+
+def note_padding(item: NoteItem) -> float:
+    return max(8.0, item.size * 0.5)
+
+
+def note_rect(item: NoteItem) -> QRectF:
+    """Papel de la nota: rodea el texto con un margen y tiene un tamaño mínimo (crece al escribir)."""
+    tb = text_box(item)
+    pad = note_padding(item)
+    w = max(tb.width(), item.size * 5.5)
+    h = max(tb.height(), item.size * 2.6)
+    return QRectF(item.x - pad, item.y - pad, w + 2 * pad, h + 2 * pad)
+
+
+def draw_note_paper(p: QPainter, item: NoteItem) -> None:
+    r = note_rect(item)
+    fold = min(r.width(), r.height()) * 0.16
+    p.save()
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QColor(0, 0, 0, 45))  # sombra
+    p.drawRoundedRect(r.translated(3, 4), 4, 4)
+    paper = QPainterPath()
+    paper.moveTo(r.left() + 4, r.top())
+    paper.lineTo(r.right() - 4, r.top())
+    paper.quadTo(r.right(), r.top(), r.right(), r.top() + 4)
+    paper.lineTo(r.right(), r.bottom() - fold)
+    paper.lineTo(r.right() - fold, r.bottom())
+    paper.lineTo(r.left() + 4, r.bottom())
+    paper.quadTo(r.left(), r.bottom(), r.left(), r.bottom() - 4)
+    paper.lineTo(r.left(), r.top() + 4)
+    paper.quadTo(r.left(), r.top(), r.left() + 4, r.top())
+    color = QColor(*item.color)
+    p.setBrush(color)
+    p.drawPath(paper)
+    # Esquina doblada
+    corner = QPolygonF([QPointF(r.right(), r.bottom() - fold), QPointF(r.right() - fold, r.bottom() - fold),
+                        QPointF(r.right() - fold, r.bottom())])
+    p.setBrush(color.darker(118))
+    p.drawPolygon(corner)
+    p.restore()
+
+
 def draw_text(p: QPainter, item: TextItem) -> None:
+    if isinstance(item, NoteItem):
+        draw_note_paper(p, item)
     font = text_font(item)
     fm = QFontMetricsF(font)
     p.setFont(font)
@@ -1034,6 +1083,35 @@ def draw_image(p: QPainter, item: ImageItem) -> None:
     p.restore()
 
 
+# --------------------------------------------------------------------------- zonas tapadas
+
+COVER_FILL = QColor(52, 57, 66)
+COVER_EDGE = QColor(118, 128, 143)
+
+
+def cover_rect(item: CoverItem) -> QRectF:
+    return QRectF(item.x, item.y, item.w, item.h).normalized()
+
+
+def draw_cover(p: QPainter, item: CoverItem) -> None:
+    r = cover_rect(item)
+    p.save()
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    p.setPen(QPen(COVER_EDGE, 1.5))
+    p.setBrush(COVER_FILL)
+    p.drawRoundedRect(r.adjusted(0.75, 0.75, -0.75, -0.75), 6, 6)
+    side = min(r.width(), r.height())
+    if side >= 14:
+        f = QFont()
+        f.setFamilies(TEXT_FAMILIES)
+        f.setBold(True)
+        f.setPixelSize(max(8, int(min(side * 0.55, 120))))
+        p.setFont(f)
+        p.setPen(QColor(150, 160, 176))
+        p.drawText(r, Qt.AlignmentFlag.AlignCenter, "?")
+    p.restore()
+
+
 def draw_item(p: QPainter, item) -> None:
     if isinstance(item, StrokeItem):
         draw_stroke(p, item)
@@ -1045,6 +1123,8 @@ def draw_item(p: QPainter, item) -> None:
         draw_stamp(p, item)
     elif isinstance(item, ImageItem):
         draw_image(p, item)
+    elif isinstance(item, CoverItem):
+        draw_cover(p, item)
     elif isinstance(item, GroupItem):
         for sub in item.items:
             draw_item(p, sub)
@@ -1055,8 +1135,12 @@ def item_rect(item) -> QRectF:
         return stroke_rect(item)
     if isinstance(item, ShapeItem):
         return shape_rect(item)
+    if isinstance(item, NoteItem):
+        return note_rect(item).adjusted(-2, -2, 6, 7)  # con la sombra
     if isinstance(item, TextItem):
         return text_box(item).adjusted(-4, -4, item.size + 8, 6)
+    if isinstance(item, CoverItem):
+        return cover_rect(item).adjusted(-2, -2, 2, 2)
     if isinstance(item, StampItem):
         r = item.size * 0.62 + 4
         return QRectF(item.x - r, item.y - r, 2 * r, 2 * r)

@@ -59,6 +59,16 @@ class TextItem:
 
 
 @dataclass
+class NoteItem(TextItem):
+    """Nota adhesiva: un texto sobre un papel de color que crece con lo escrito.
+
+    Es un texto más (se escribe, se edita y se mueve igual); ``color`` es el del papel.
+    """
+
+    color: tuple[int, int, int, int] = (255, 238, 128, 255)
+
+
+@dataclass
 class TextEditItem:
     """Edición de un texto ya escrito: sustituye (en su mismo lugar) al texto con ese ``uid``.
 
@@ -91,6 +101,20 @@ class ImageItem:
     """Imagen pegada (PNG) que ocupa el rectángulo (x, y, w, h) en píxeles lógicos."""
 
     data: bytes  # PNG
+    x: float
+    y: float
+    w: float
+    h: float
+    opacity: float = 1.0
+    uid: str = field(default_factory=lambda: uuid.uuid4().hex)
+    # Gomas que «viajan» con el elemento al moverlo (las calcula resolve_items; no se guardan)
+    mask: list = field(default_factory=list, compare=False, repr=False)
+
+
+@dataclass
+class CoverItem:
+    """Zona tapada (herramienta «Tapar zona»): un rectángulo opaco que se descubre con un clic."""
+
     x: float
     y: float
     w: float
@@ -150,8 +174,8 @@ class ClearItem:
 
 
 Item = (StrokeItem | ShapeItem | TextItem | TextEditItem | StampItem | ImageItem | GroupItem | ClearItem
-        | TransformItem | DeleteItem | DuplicateItem)
-DRAWABLE = (StrokeItem, ShapeItem, TextItem, StampItem, ImageItem)
+        | TransformItem | DeleteItem | DuplicateItem | CoverItem)
+DRAWABLE = (StrokeItem, ShapeItem, TextItem, StampItem, ImageItem, CoverItem)
 
 
 def is_eraser_item(item) -> bool:
@@ -174,7 +198,7 @@ def transformed(item, dx: float = 0.0, dy: float = 0.0, scale: float = 1.0, ox: 
     if isinstance(item, (TextItem, StampItem)):
         x, y = f(item.x, item.y)
         return replace(item, x=x, y=y, size=item.size * scale, mask=mask)
-    if isinstance(item, ImageItem):
+    if isinstance(item, (ImageItem, CoverItem)):
         x, y = f(item.x, item.y)
         return replace(item, x=x, y=y, w=item.w * scale, h=item.h * scale, mask=mask)
     return item

@@ -51,6 +51,8 @@ el **Manual de usuario** en PDF.
 | **Formas perfectas** | Opción que se **activa o desactiva** (botón con pincel, lápiz o pluma, o tecla **G**; desactivada por defecto): al soltar el trazo, las rectas, círculos, elipses, rectángulos y polígonos dibujados a mano se convierten en figuras exactas. Lo demás queda tal cual. |
 | **Seleccionar y mover** | Tecla **A**: clic en un elemento o lazo para seleccionar; arrastrar para mover y la esquina para cambiar el tamaño. **Supr** elimina, **Ctrl+D** duplica, **Ctrl+A** selecciona todo. Lo borrado con la goma sigue borrado al mover. |
 | **Pegar** | **Ctrl+V** o botón: pega una imagen (o archivo de imagen) centrada en el cursor, lista para moverla o agrandarla; un texto copiado se pega como texto. Se guarda en la sesión y sale en el PDF. |
+| **Notas adhesivas** | Tecla **O** o botón de la nota: un clic pega una nota de papel de color (amarilla, rosada, celeste, verde, naranja o blanca) donde se escribe como con Texto; crece con lo escrito. Clic sobre ella para editarla; se mueve, se duplica y se guarda en la sesión y el PDF. |
+| **Recortar zona** | Tecla **X**, **Ctrl+Alt+R** o el menú de la cámara: la pantalla se congela y se arrastra un rectángulo. Se guarda solo esa parte (con o sin lo dibujado) y se copia al portapapeles, o se **pega en la pizarra** como imagen en el mismo lugar. |
 | **Temporizador** | Botón con menú: cuenta regresiva (1 a 30 min u otro tiempo) o cronómetro, en una ventanita siempre encima con pausa, ±1 minuto y aviso «¡Tiempo!» en rojo al terminar. |
 | **Color y grosor** | Botón de color con selector completo + paleta de 12 colores; deslizadores de **grosor** y **opacidad** (cada herramienta recuerda su propio tamaño y opacidad). También con la **rueda del ratón** sobre la pizarra. |
 | **Texto** | Tecla **T**: clic donde quieras y escribe con el teclado (tildes, ñ, varias líneas, Ctrl+V para pegar). Tamaño de letra, color y **negrita**. Mientras escribes, las teclas no activan atajos. Esc o un clic fuera termina el texto. **Clic sobre un texto ya escrito** (donde todavía se vea: lo borrado con la goma no se reabre) para editarlo: cursor con flechas, Inicio/Fin, Supr, arrastrar para moverlo; cada edición se puede deshacer. |
@@ -58,8 +60,11 @@ el **Manual de usuario** en PDF.
 | **Fondo** | Transparente, «Oscurecer escritorio», «Pizarra blanca» o «Pizarra verde» (para usarla como pizarra tradicional). |
 | **Pautas** | **Cuadrícula**, **papel milimetrado**, **hoja rayada**, **pauta de caligrafía** (4 líneas), **plano cartesiano** con ejes numerados y **pentagrama**, sobre cualquier fondo. Se incluyen en capturas y PDF. En «Ratón libre» la hoja (fondo y pauta) se aparta para poder usar el equipo y vuelve al pasar a «Dibujando». |
 | **Foco** | **F** / **Ctrl+Alt+F**: oscurece la pantalla salvo un círculo o un **rectángulo** (franja para leer línea a línea) alrededor del cursor (**Alt + rueda** para su tamaño, **Mayús+F** o clic derecho en el botón para cambiar la forma). Funciona también en «Ratón libre», sobre otros programas. |
-| **Cortina** | **V**: tapa la pantalla y se descubre poco a poco arrastrándola o con **↓ / ↑** (preguntas antes que respuestas, textos párrafo a párrafo). |
+| **Cortina** | **V**: tapa la pantalla y se descubre poco a poco **desde arriba, abajo, la izquierda o la derecha** (menú del botón o **Mayús+V** para cambiar de lado), arrastrando su borde o con las **flechas** (preguntas antes que respuestas, textos párrafo a párrafo, tablas columna por columna). |
+| **Tapar zona** | Tecla **H**: arrastra para tapar una parte de la pantalla (p. ej. las respuestas) con un rectángulo con «?»; un clic sobre él la descubre. Se puede deshacer y se guarda en la sesión. |
 | **Resaltar cursor y clics** | **M** / **Ctrl+Alt+M**: halo amarillo alrededor del puntero y una onda en cada clic (roja izquierdo, azul derecho), también al hacer clic en otros programas. |
+| **Mostrar teclas pulsadas** | **Ctrl+Alt+K** o el botón del teclado: los atajos (Ctrl + C, Alt + Tab, Win + D…) y teclas especiales (Intro, Esc, flechas, F1…) que se pulsan en cualquier programa aparecen abajo en el centro; las repeticiones se cuentan (×2). El texto que se escribe nunca se muestra. |
+| **Pantalla táctil y modo táctil** | Un dedo dibuja; **dos dedos** (toque) deshacen y **tres** rehacen; con el zoom, **pellizcar** acerca y aleja; la **palma** borra (si la pantalla informa el tamaño del contacto). El **modo táctil** (botón de la mano en la barra) agranda botones, menús y deslizadores; se activa solo si hay pantalla táctil y sirve también sin ella. |
 | **Páginas** | Varias páginas por clase, cada una con su dibujo, historial, fondo y pauta. **N** crea una nueva, **AvPág / RePág** pasan de página (compatible con presentadores inalámbricos). |
 | **Sesiones y PDF** | **Guardar / abrir** la clase en un archivo `.pizarra` (Ctrl+S / Ctrl+O) y **exportar a PDF** (Ctrl+P) con una página del PDF por página de la pizarra. |
 | **Zoom** | **Z**, **Ctrl+Alt+Z** o el botón de la lupa: congela la pantalla donde está el cursor y la amplía (2× al empezar, de 1× a 10×) para hacer énfasis en un detalle. **Rueda** para acercar/alejar centrado en el cursor, **clic derecho (o central) y arrastrar** para moverse, **Esc** para salir. Se puede dibujar encima con cualquier herramienta: los trazos quedan colocados sobre el contenido real al salir del zoom. |
@@ -118,6 +123,8 @@ deshacer, rehacer, borrar todo · zoom, captura, carpeta de capturas · ocultar,
 | **Ctrl+Alt+Z** | Zoom: ampliar la zona de la pantalla bajo el cursor (y salir del zoom) |
 | **Ctrl+Alt+F** | Foco |
 | **Ctrl+Alt+M** | Resaltar el cursor y los clics |
+| **Ctrl+Alt+K** | Mostrar / ocultar las teclas pulsadas |
+| **Ctrl+Alt+R** | Recortar una zona de la pantalla |
 | **Ctrl+Alt+S** | Captura de la pantalla actual **con** el trazado |
 | **Ctrl+Alt+Shift+S** | Captura de la pantalla actual **sin** el trazado |
 
@@ -142,6 +149,7 @@ deshacer, rehacer, borrar todo · zoom, captura, carpeta de capturas · ocultar,
 | **A** | Seleccionar y mover (Ctrl+A todo · Ctrl+D duplicar · Supr eliminar · Esc quitar selección) |
 | **G** | Formas perfectas sí / no |
 | **Ctrl+V** | Pegar una imagen o un texto |
+| **O** · **H** · **X** | Nota adhesiva · Tapar zona (clic sobre ella: descubrir) · Recortar zona |
 | **B** | Cambiar tipo de pincel (Duro → Suave → Aerógrafo → Caligráfico) |
 | **T** | Texto |
 | **L** | Puntero láser / tinta temporal |
@@ -158,13 +166,14 @@ deshacer, rehacer, borrar todo · zoom, captura, carpeta de capturas · ocultar,
 | **Z** | Activar / salir del zoom |
 | **F** · **V** · **M** | Foco · Cortina · Resaltar cursor y clics |
 | **Mayús+F** | Foco en círculo o en rectángulo |
-| **↓ / ↑** | Descubrir / tapar con la cortina |
+| **Mayús+V** | Cortina desde el lado siguiente (arriba → abajo → izquierda → derecha) |
+| **Flechas** | Mover el borde de la cortina (↓ con la de arriba descubre, ↑ vuelve a tapar…) |
 | **Alt + rueda** | Tamaño del foco |
 | **N** | Página nueva |
 | **AvPág / RePág** | Página siguiente / anterior |
 | **Ctrl+S** · **Ctrl+Shift+S** | Guardar sesión · Guardar como |
 | **Ctrl+O** · **Ctrl+P** | Abrir sesión · Exportar a PDF |
-| **Esc** | Salir del zoom; fuera del zoom, pasar a «Ratón libre» |
+| **Esc** | Cancelar el recorte o salir del zoom; si no, quitar la selección o pasar a «Ratón libre» |
 | **F1** | Ayuda con la lista de atajos |
 
 ### En el zoom
@@ -397,11 +406,12 @@ Pizarra_Virtual/
 ├── pizarra_virtual/
 │   ├── main.py                   # Arranque: DPI, instancia única, registro de errores
 │   ├── app.py                    # Controlador: estado, páginas, modos, efectos, sesiones, capturas, atajos
-│   ├── overlay.py                # Superposición por monitor: entrada de ratón/tableta y lienzo
+│   ├── overlay.py                # Superposición por monitor: ratón, tableta, toques y lienzo
 │   ├── render.py                 # Rasterizado de pinceles, pluma, texto, figuras, sellos y pautas
 │   ├── templates.py              # Plantillas (mapa conceptual, línea de tiempo, Venn, tablas…)
 │   ├── shape_recognition.py      # «Formas perfectas»: reconocimiento de formas dibujadas a mano
 │   ├── timer.py                  # Temporizador / cronómetro en pantalla
+│   ├── keyview.py                # «Mostrar teclas pulsadas» (solo atajos, nunca el texto)
 │   ├── session.py                # Páginas, sesiones .pizarra y exportación a PDF
 │   ├── toolbar.py                # Barra de herramientas flotante
 │   ├── hotkeys.py                # Atajos globales (RegisterHotKey)

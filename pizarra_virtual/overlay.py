@@ -9,9 +9,13 @@ ampliada. Todo lo que se dibuja se guarda en coordenadas reales de la
 pantalla, así que al salir del zoom los trazos quedan exactamente sobre el
 contenido que se señaló.
 
-Efectos de presentación (no forman parte del dibujo ni del historial): cortina,
-foco, resaltado del cursor y de los clics, y puntero láser con tinta que se
+Efectos de presentación (no forman parte del dibujo ni del historial): cortina
+(que se descubre desde arriba, abajo, la izquierda o la derecha), foco, resaltado
+del cursor, de los clics y de las teclas, y puntero láser con tinta que se
 desvanece. Se dibujan en coordenadas de la ventana, encima de todo.
+
+Modo recorte: la superposición muestra la pantalla congelada y se arrastra un
+rectángulo para recortar esa zona como imagen.
 """
 from __future__ import annotations
 
@@ -23,14 +27,17 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QEvent, QPoint, QPointF, QRect, QRectF, QSize, Qt, QTimer
 from PySide6.QtGui import (
-    QColor, QCursor, QFont, QGuiApplication, QImage, QInputDevice, QPainter, QPainterPath, QPen, QPixmap,
-    QPointingDevice, QPolygonF, QRadialGradient,
+    QColor, QCursor, QEventPoint, QFont, QGuiApplication, QImage, QInputDevice, QPainter, QPainterPath, QPen,
+    QPixmap, QPointingDevice, QPolygonF, QRadialGradient,
 )
 from PySide6.QtWidgets import QWidget
 
 from . import render, shape_recognition, winutil
-from .items import ClearItem, ShapeItem, StrokeItem, TextEditItem, TextItem, TransformItem, transformed
-from .tools import RECOGNIZABLE_TOOLS, SHAPE_TOOLS, Tool
+from .items import (
+    ClearItem, CoverItem, DeleteItem, NoteItem, ShapeItem, StrokeItem, TextEditItem, TextItem, TransformItem,
+    transformed,
+)
+from .tools import NOTE_TEXT_RGBA, RECOGNIZABLE_TOOLS, SHAPE_TOOLS, Tool
 
 if TYPE_CHECKING:  # pragma: no cover
     from .app import Controller
@@ -38,6 +45,13 @@ if TYPE_CHECKING:  # pragma: no cover
 _FMT = QImage.Format.Format_ARGB32_Premultiplied
 _TRANSPARENT = Qt.GlobalColor.transparent
 _MIN_POINT_DISTANCE = 0.75
+
+_TOUCH_EVENTS = (QEvent.Type.TouchBegin, QEvent.Type.TouchUpdate, QEvent.Type.TouchEnd, QEvent.Type.TouchCancel)
+# Gestos táctiles
+TOUCH_MULTI_MS = 250    # un segundo dedo antes de este tiempo convierte el trazo en gesto
+TOUCH_SLOP = 24         # px: más movimiento ya no es un «toque»
+TOUCH_TAP_MS = 500      # duración máxima de un toque con dos o tres dedos
+PALM_SIZE = 70          # px: un contacto más ancho es la palma (o el canto de la mano) → goma
 
 ZOOM_DEFAULT = 2.0
 ZOOM_MIN = 1.0
@@ -60,6 +74,13 @@ def spotlight_rect(center: QPointF, radius: float) -> QRectF:
     return QRectF(center.x() - w, center.y() - h, 2 * w, 2 * h)
 CURTAIN_COLOR = QColor(30, 32, 38)
 CURTAIN_GRAB = 22                 # px alrededor del borde de la cortina para arrastrarla
+CURTAIN_HINTS = {"top": "▼ arrastra o ↓ ↑", "bottom": "▲ arrastra o ↑ ↓",
+                 "left": "▶ arrastra o → ←", "right": "◀ arrastra o ← →"}
+COVER_MIN = 8                     # lado mínimo (px) de una zona tapada; menos es un clic
+CROP_DIM = QColor(0, 0, 0, 120)
+KEY_SHOW_MS = 1600                # cuánto se ve cada tecla pulsada...
+KEY_FADE_MS = 400                 # ...y cuánto tarda en desvanecerse
+KEY_MAX = 4                       # teclas visibles a la vez
 HALO_RADIUS = 24
 RIPPLE_MS = 450
 LASER_HOLD_MS = 900               # la tinta del láser permanece este tiempo tras soltar...
@@ -120,6 +141,8 @@ class Overlay(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        # Pantallas táctiles: un dedo dibuja; dos dedos a la vez deshacen (o mueven el zoom).
+        self.setAttribute(Qt.WidgetAttribute.WA_AcceptTouchEvents)
 
         self.canvas = QImage()
         self.layer = QImage()
@@ -147,6 +170,8 @@ class Overlay(QWidget):
         self._text_drag: tuple[QPointF, float, float] | None = None  # (inicio, x, y) al arrastrar un texto
         self._state: render.StrokeState | None = None
         self._tablet_active = False
+        self._touch_active = False  # gesto táctil en curso (el ratón simulado se ignora)
+        self._touch: dict | None = None
         self._last_pos = QPointF()
         self._last_t = 0
         # Estado de la pluma
@@ -172,9 +197,21 @@ class Overlay(QWidget):
         self._hint_timer.setSingleShot(True)
         self._hint_timer.timeout.connect(self._hide_zoom_hint)
 
+        # Zona tapada en curso (herramienta «Tapar zona»)
+        self._cover_from: QPointF | None = None
+        self._cover_hit: str | None = None  # uid de la zona tapada donde empezó el clic
+        self._cover: CoverItem | None = None  # vista previa mientras se arrastra
+
+        # Recortar zona: pantalla congelada y rectángulo elegido
+        self._crop_img: QImage | None = None
+        self._crop_from: QPointF | None = None
+        self._crop_rect = QRectF()
+
         # Efectos de presentación
-        self.curtain_y: float | None = None
+        self.curtain: float | None = None  # cuánto se ha descubierto (px); None = sin cortina
+        self.curtain_side = "top"  # lado desde el que se descubre: top, bottom, left o right
         self._curtain_drag: float | None = None  # desplazamiento entre el ratón y el borde
+        self._keys: list[list] = []  # teclas pulsadas visibles: [texto, instante, veces]
         self._cursor_view: QPointF | None = None
         self._ripples: list[tuple[QPointF, float, QColor]] = []
         self._laser: LaserTrail | None = None
@@ -211,6 +248,9 @@ class Overlay(QWidget):
 
     def event(self, ev):
         t = ev.type()
+        if t in _TOUCH_EVENTS:
+            self._touch_event(ev)
+            return True
         if t in (QEvent.Type.DevicePixelRatioChange, QEvent.Type.ScreenChangeInternal):
             self._ensure_buffers()
             self.ctrl.refresh_cursor(self)
@@ -310,6 +350,102 @@ class Overlay(QWidget):
         self._zoom_hint = False
         self.update()
 
+    # ------------------------------------------------------------------ recortar zona
+
+    @property
+    def crop_active(self) -> bool:
+        return self._crop_img is not None
+
+    @property
+    def crop_rect(self) -> QRectF:
+        return QRectF(self._crop_rect)
+
+    def start_crop(self, screenshot: QImage) -> None:
+        """Muestra ``screenshot`` (la pantalla congelada) para elegir la zona que se recorta."""
+        self.finish_current()
+        self._crop_img = screenshot
+        self._crop_from = None
+        self._crop_rect = QRectF()
+        self.setCursor(Qt.CursorShape.CrossCursor)
+        self.update()
+
+    def end_crop(self) -> None:
+        if not self.crop_active:
+            return
+        self._crop_img = None
+        self._crop_from = None
+        self._crop_rect = QRectF()
+        self.ctrl.refresh_cursor(self)
+        self.update()
+
+    def crop_image(self, rect: QRectF) -> QImage:
+        """La parte de la pantalla congelada que ocupa ``rect`` (coordenadas de la ventana)."""
+        img = self._crop_img
+        if img is None or rect.isEmpty():
+            return QImage()
+        sx, sy = img.width() / max(1, self.width()), img.height() / max(1, self.height())
+        src = QRectF(rect.x() * sx, rect.y() * sy, rect.width() * sx, rect.height() * sy).toAlignedRect()
+        out = img.copy(src.intersected(img.rect()))
+        out.setDevicePixelRatio(1.0)
+        return out
+
+    def _crop_press(self, view: QPointF) -> None:
+        self._crop_from = QPointF(view)
+        self._crop_rect = QRectF()
+        self.update()
+
+    def _crop_move(self, view: QPointF) -> None:
+        if self._crop_from is None:
+            return
+        bounds = QRectF(0, 0, self.width(), self.height())
+        self._crop_rect = QRectF(self._crop_from, view).normalized().intersected(bounds)
+        self.update()
+
+    def _crop_release(self, view: QPointF) -> None:
+        if self._crop_from is None:
+            return
+        self._crop_move(view)
+        self._crop_from = None
+        r = self._crop_rect
+        if r.width() >= 4 and r.height() >= 4:
+            self.ctrl.crop_finished(self, QRectF(r))
+        else:  # un clic sin arrastrar: se sigue esperando el rectángulo
+            self._crop_rect = QRectF()
+            self.update()
+
+    def _paint_crop(self, p: QPainter) -> None:
+        full = QRectF(0, 0, self.width(), self.height())
+        p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        p.drawImage(full, self._crop_img, QRectF(self._crop_img.rect()))
+        r = self._crop_rect
+        dim = QPainterPath()
+        dim.addRect(full)
+        if not r.isEmpty():
+            hole = QPainterPath()
+            hole.addRect(r)
+            dim = dim.subtracted(hole)
+        p.fillPath(dim, CROP_DIM)
+        if not r.isEmpty():
+            p.setPen(QPen(QColor(255, 255, 255), 1.0))
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawRect(r)
+            pen = QPen(QColor(30, 136, 229), 1.0, Qt.PenStyle.DashLine)
+            p.setPen(pen)
+            p.drawRect(r)
+            label = f"{round(r.width())} × {round(r.height())}"
+            f = QFont(self.font())
+            f.setPointSizeF(9.5)
+            p.setFont(f)
+            tw = p.fontMetrics().horizontalAdvance(label) + 14
+            box = QRectF(r.left(), r.top() - 24 if r.top() >= 26 else r.bottom() + 4, tw, 20)
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QColor(20, 22, 26, 215))
+            p.drawRoundedRect(box, 5, 5)
+            p.setPen(QColor(255, 255, 255))
+            p.drawText(box, Qt.AlignmentFlag.AlignCenter, label)
+        self._paint_banner(p, "Arrastra para elegir la zona que quieres recortar   ·   "
+                              "Esc o clic derecho: cancelar")
+
     def to_canvas(self, pos: QPointF) -> QPointF:
         """Coordenadas de la ventana → coordenadas reales de la pantalla (lienzo)."""
         if not self.zoom_active:
@@ -403,7 +539,7 @@ class Overlay(QWidget):
 
     def _draw_drawing(self, p: QPainter) -> None:
         p.drawImage(QPointF(0, 0), self.canvas)
-        active = self._stroke or self._shape or self._text
+        active = self._stroke or self._shape or self._text or self._cover
         if active is not None and not render.is_eraser(active):
             p.save()
             p.setOpacity(active.opacity)
@@ -431,6 +567,10 @@ class Overlay(QWidget):
         if self.canvas.isNull():
             return
         p = QPainter(self)
+        if self.crop_active:
+            self._paint_crop(p)
+            p.end()
+            return
         if self.zoom_active:
             self._paint_zoomed(p, QRectF(ev.rect()), True, hint=False)
         else:
@@ -500,7 +640,7 @@ class Overlay(QWidget):
         c = self.ctrl
         p.save()
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        if self.curtain_y is not None:
+        if self.curtain is not None:
             self._paint_curtain(p)
         if c.spotlight:
             if self._cursor_view is not None and c.spotlight_shape == "rect":
@@ -531,6 +671,8 @@ class Overlay(QWidget):
             p.setPen(QPen(QColor(255, 186, 0, 220), 2.0))
             p.setBrush(QColor(255, 225, 0, 85))
             p.drawEllipse(self._cursor_view, HALO_RADIUS, HALO_RADIUS)
+        if self._keys:
+            self._paint_keys(p, now)
         for pos, t0, color in self._ripples:
             f = min(1.0, (now - t0) / RIPPLE_MS)
             col = QColor(color)
@@ -541,13 +683,65 @@ class Overlay(QWidget):
             p.drawEllipse(pos, radius, radius)
         p.restore()
 
+    # ---- teclas pulsadas
+
+    def show_key(self, label: str, now: float) -> None:
+        """Muestra una tecla o combinación (p. ej. «Ctrl + C»); si se repite, suma «×2», «×3»…"""
+        if self._keys and self._keys[-1][0] == label and now - self._keys[-1][1] < KEY_SHOW_MS:
+            self._keys[-1][1] = now
+            self._keys[-1][2] += 1
+        else:
+            self._keys.append([label, now, 1])
+            del self._keys[:-KEY_MAX]
+        self.update(self._keys_rect())
+
+    @staticmethod
+    def _key_alpha(t0: float, now: float) -> float:
+        age = now - t0 - KEY_SHOW_MS
+        return 1.0 if age <= 0 else max(0.0, 1.0 - age / KEY_FADE_MS)
+
+    def _key_font(self) -> QFont:
+        f = QFont(self.font())
+        f.setPixelSize(int(26 * self.ctrl.touch_scale ** 0.5))
+        f.setBold(True)
+        return f
+
+    def _keys_rect(self) -> QRect:
+        h = 70 * KEY_MAX * self.ctrl.touch_scale ** 0.5
+        return QRectF(0, self.height() - 90 - h, self.width(), h + 90).toAlignedRect()
+
+    def _paint_keys(self, p: QPainter, now: float) -> None:
+        p.save()
+        p.setFont(self._key_font())
+        fm = p.fontMetrics()
+        y = self.height() - 90.0
+        for label, t0, count in reversed(self._keys):
+            alpha = self._key_alpha(t0, now)
+            if alpha <= 0:
+                continue
+            text = label + (f"  ×{count}" if count > 1 else "")
+            tw, th = fm.horizontalAdvance(text) + 36, fm.height() + 18
+            box = QRectF((self.width() - tw) / 2, y - th, tw, th)
+            p.setOpacity(alpha)
+            p.setPen(QPen(QColor(255, 255, 255, 60), 1.0))
+            p.setBrush(QColor(20, 22, 26, 225))
+            p.drawRoundedRect(box, 10, 10)
+            p.setPen(QColor(255, 255, 255))
+            p.drawText(box, Qt.AlignmentFlag.AlignCenter, text)
+            y -= th + 10
+        p.restore()
+
     def _paint_curtain(self, p: QPainter) -> None:
         w, h = float(self.width()), float(self.height())
-        y = max(0.0, min(h, self.curtain_y))
-        p.fillRect(QRectF(0, y, w, h - y), CURTAIN_COLOR)
-        p.fillRect(QRectF(0, y, w, 3), QColor(80, 140, 230))
-        if h - y > 40:
-            pill = QRectF(w / 2 - 70, y + 8, 140, 24)
+        side, e = self.curtain_side, self.curtain_edge()
+        p.fillRect(self.curtain_rect(), CURTAIN_COLOR)
+        edge = {"top": QRectF(0, e, w, 3), "bottom": QRectF(0, e - 3, w, 3),
+                "left": QRectF(e, 0, 3, h), "right": QRectF(e - 3, 0, 3, h)}[side]
+        p.fillRect(edge, QColor(80, 140, 230))
+        covered = {"top": h - e, "bottom": e, "left": w - e, "right": e}[side]
+        if covered > (40 if side in ("top", "bottom") else 160):
+            pill = {"top": QRectF(w / 2 - 70, e + 8, 140, 24), "bottom": QRectF(w / 2 - 70, e - 32, 140, 24),
+                    "left": QRectF(e + 8, h / 2 - 12, 140, 24), "right": QRectF(e - 148, h / 2 - 12, 140, 24)}[side]
             p.setPen(Qt.PenStyle.NoPen)
             p.setBrush(QColor(70, 74, 84))
             p.drawRoundedRect(pill, 12, 12)
@@ -555,7 +749,7 @@ class Overlay(QWidget):
             f = QFont(self.font())
             f.setPointSizeF(9.5)
             p.setFont(f)
-            p.drawText(pill, Qt.AlignmentFlag.AlignCenter, "▼ arrastra o ↓ ↑ ▲")
+            p.drawText(pill, Qt.AlignmentFlag.AlignCenter, CURTAIN_HINTS[side])
 
     @staticmethod
     def _paint_laser_dot(p: QPainter, pos: QPointF, size: float, color: QColor) -> None:
@@ -622,26 +816,77 @@ class Overlay(QWidget):
         for pos, t0, _ in self._ripples:
             self.update(QRectF(pos.x() - 42, pos.y() - 42, 84, 84).toAlignedRect())
         self._ripples = [r for r in self._ripples if now - r[1] < RIPPLE_MS]
+        if self._keys:
+            self.update(self._keys_rect())
+            self._keys = [k for k in self._keys if self._key_alpha(k[1], now) > 0]
         alive = []
         for trail in self._trails:
             self.update(trail.rect().toAlignedRect())
             if trail.alpha(now) > 0:
                 alive.append(trail)
         self._trails = alive
-        return bool(self._ripples or self._trails or self._laser)
+        return bool(self._ripples or self._trails or self._laser or self._keys)
 
     def clear_ripples(self) -> None:
         self._ripples.clear()
         self.update()
 
-    # ------------------------------------------------------------------ cortina
-
-    def set_curtain(self, y: float | None) -> None:
-        self.curtain_y = None if y is None else max(0.0, min(float(self.height()), y))
+    def clear_keys(self) -> None:
+        self._keys.clear()
         self.update()
 
+    @property
+    def keys_shown(self) -> list[str]:
+        return [label + (f"  ×{count}" if count > 1 else "") for label, _t, count in self._keys]
+
+    # ------------------------------------------------------------------ cortina
+
+    @property
+    def _curtain_vertical(self) -> bool:
+        return self.curtain_side in ("top", "bottom")
+
+    def _curtain_extent(self) -> float:
+        return float(self.height() if self._curtain_vertical else self.width())
+
+    def _curtain_axis(self, pos: QPointF) -> float:
+        return pos.y() if self._curtain_vertical else pos.x()
+
+    def curtain_edge(self) -> float:
+        """Coordenada (y o x) del borde de la cortina."""
+        ext = self._curtain_extent()
+        r = max(0.0, min(ext, self.curtain or 0.0))
+        return r if self.curtain_side in ("top", "left") else ext - r
+
+    def curtain_rect(self) -> QRectF:
+        """Parte de la pantalla que la cortina todavía tapa."""
+        w, h, e = float(self.width()), float(self.height()), self.curtain_edge()
+        return {"top": QRectF(0, e, w, h - e), "bottom": QRectF(0, 0, w, e),
+                "left": QRectF(e, 0, w - e, h), "right": QRectF(0, 0, e, h)}[self.curtain_side]
+
+    def set_curtain(self, revealed: float | None, side: str | None = None) -> None:
+        """Cortina descubierta ``revealed`` píxeles desde su lado (None la quita)."""
+        if side is not None:
+            self.curtain_side = side
+        self.curtain = None if revealed is None else max(0.0, min(self._curtain_extent(), float(revealed)))
+        self.update()
+
+    def move_curtain_edge(self, coord: float) -> None:
+        """Coloca el borde de la cortina en la coordenada ``coord`` (y o x, según el lado)."""
+        ext = self._curtain_extent()
+        self.set_curtain(coord if self.curtain_side in ("top", "left") else ext - coord)
+
     def _curtain_hit(self, pos: QPointF) -> bool:
-        return self.curtain_y is not None and pos.y() >= self.curtain_y - CURTAIN_GRAB
+        if self.curtain is None:
+            return False
+        g = CURTAIN_GRAB * self.ctrl.touch_scale
+        grow = {"top": (0, -g, 0, 0), "bottom": (0, 0, 0, g), "left": (-g, 0, 0, 0), "right": (0, 0, g, 0)}
+        return self.curtain_rect().adjusted(*grow[self.curtain_side]).contains(pos)
+
+    def _curtain_press(self, view: QPointF) -> None:
+        self._curtain_drag = self.curtain_edge() - self._curtain_axis(view)
+
+    def _curtain_move(self, view: QPointF) -> None:
+        self.move_curtain_edge(self._curtain_axis(view) + self._curtain_drag)
 
     # ------------------------------------------------------------------ dibujo
 
@@ -652,7 +897,7 @@ class Overlay(QWidget):
             self.finish_current()
             self._sel_press(pos)
             return
-        if not eraser and self.ctrl.tool == Tool.TEXT and self._text is not None \
+        if not eraser and self.ctrl.tool in (Tool.TEXT, Tool.NOTE) and self._text is not None \
                 and render.text_hit_rect(self._text).contains(pos):
             # Clic dentro del texto que se está escribiendo: mueve el cursor (o arrastra el texto).
             self._caret = render.text_index_at(self._text, pos)
@@ -674,17 +919,28 @@ class Overlay(QWidget):
             if item.kind == "number":
                 c.refresh_cursor(self)  # el cursor pasa a mostrar el número siguiente
             return
+        if tool == Tool.COVER:
+            hit = self.cover_at(pos)
+            self._cover_from = QPointF(pos)
+            self._cover_hit = hit.uid if hit is not None else None
+            self._cover = None
+            return
         if tool in SHAPE_TOOLS:
             self._shape = ShapeItem(tool, rgba, size, opacity, pos.x(), pos.y(), pos.x(), pos.y(),
                                     filled=c.fill_shapes)
             return
-        if tool == Tool.TEXT:
+        if tool in (Tool.TEXT, Tool.NOTE):
             hit = self.text_at(pos)
             if hit is not None:
                 self._open_text(hit, pos)
                 return
-            fm_height = size * 1.33
-            self._text = TextItem(rgba, size, opacity, pos.x(), pos.y() - fm_height / 2, "", c.text_bold)
+            if tool == Tool.NOTE:  # la esquina superior izquierda de la nota queda donde se hizo clic
+                pad = max(8.0, size * 0.5)
+                self._text = NoteItem(NOTE_TEXT_RGBA, size, 1.0, pos.x() + pad, pos.y() + pad, "", c.text_bold,
+                                      color=c.note_rgba)
+            else:
+                fm_height = size * 1.33
+                self._text = TextItem(rgba, size, opacity, pos.x(), pos.y() - fm_height / 2, "", c.text_bold)
             self._caret = 0
             self._edit_uid = self._edit_orig = None
             self._text_drag = None
@@ -764,6 +1020,20 @@ class Overlay(QWidget):
         if self._sel_mode is not None:
             self._sel_drag(pos, modifiers)
             return
+        if self._cover_from is not None:
+            rect = QRectF(self._cover_from, pos).normalized()
+            old = QRectF(self._layer_rect)
+            self._clear_layer()
+            if rect.width() >= COVER_MIN and rect.height() >= COVER_MIN:
+                self._cover = CoverItem(rect.x(), rect.y(), rect.width(), rect.height())
+                p = self._painter(self.layer)
+                render.draw_cover(p, self._cover)
+                p.end()
+                self._layer_rect = render.item_rect(self._cover)
+            else:
+                self._cover = None
+            self.update(self._view_rect(old.united(self._layer_rect)))
+            return
         if self._text is not None and self._text_drag is not None:
             start, x0, y0 = self._text_drag
             dx, dy = pos.x() - start.x(), pos.y() - start.y()
@@ -799,7 +1069,7 @@ class Overlay(QWidget):
         if self._sel_mode is not None:
             self._sel_finish(pos, modifiers)
             return
-        if self._shape is not None:
+        if self._shape is not None or self._cover_from is not None:
             self._move(pos, pressure, t, modifiers)
         elif self._stroke is not None and self._stroke.tool == Tool.PEN:
             # El trazo termina exactamente donde se levantó la pluma.
@@ -863,7 +1133,26 @@ class Overlay(QWidget):
                 self.rebuild()
             self.update()
             self.ctrl.end_text_edit(self)
+        elif self._cover_from is not None:
+            cover, hit = self._cover, self._cover_hit
+            self._cover_from = self._cover = self._cover_hit = None
+            self._clear_layer()
+            if cover is not None:  # se arrastró: zona tapada nueva
+                self.apply_item(cover, update=False)
+                self.ctrl.push(self.key, cover)
+            elif hit is not None:  # clic sobre una zona tapada: se descubre (se puede deshacer)
+                self.ctrl.push(self.key, DeleteItem([hit]))
+                self.rebuild()
+            self.update()
         self._state = None
+
+    def cover_at(self, pos: QPointF) -> CoverItem | None:
+        """La zona tapada visible (la de más arriba) bajo un punto, o None."""
+        for _idx, item, later in reversed(self.selectable_items()):
+            if isinstance(item, CoverItem) and render.cover_rect(item).contains(pos) \
+                    and render.ink_near(item, later, pos, 2.0):
+                return item
+        return None
 
     def cancel_current(self) -> None:
         """Descarta el elemento en curso (la goma ya aplicada se conserva en el historial)."""
@@ -875,6 +1164,7 @@ class Overlay(QWidget):
         self._stroke = None
         self._shape = None
         self._text = None
+        self._cover_from = self._cover = self._cover_hit = None
         self._edit_uid = self._edit_orig = None
         self._text_drag = None
         self._caret_timer.stop()
@@ -888,7 +1178,8 @@ class Overlay(QWidget):
 
     @property
     def busy(self) -> bool:
-        return self._stroke is not None or self._shape is not None or self._text is not None
+        return (self._stroke is not None or self._shape is not None or self._text is not None
+                or self._cover_from is not None)
 
     # ------------------------------------------------------------------ selección
 
@@ -904,7 +1195,7 @@ class Overlay(QWidget):
         return rect
 
     def _handle_rect(self, box: QRectF) -> QRectF:
-        h = 16.0 / max(self.zoom_factor, 0.01)
+        h = 16.0 * self.ctrl.touch_scale / max(self.zoom_factor, 0.01)
         return QRectF(box.right() - h / 2, box.bottom() - h / 2, h, h)
 
     def selectable_items(self) -> list[tuple[int, object, list | None]]:
@@ -1114,9 +1405,11 @@ class Overlay(QWidget):
         """Aplica color, tamaño, negrita y opacidad al texto que se está escribiendo."""
         if self._text is None:
             return
-        self._text.rgba, self._text.size, self._text.bold = tuple(rgba), size, bold
-        if opacity is not None:
-            self._text.opacity = opacity
+        self._text.size, self._text.bold = size, bold
+        if not isinstance(self._text, NoteItem):  # la nota conserva su letra oscura y es opaca
+            self._text.rgba = tuple(rgba)
+            if opacity is not None:
+                self._text.opacity = opacity
         self._render_text_preview()
 
     def text_key(self, ev) -> None:
@@ -1201,19 +1494,48 @@ class Overlay(QWidget):
 
     # ------------------------------------------------------------------ eventos de entrada
 
+    # Pulsar / arrastrar / soltar con el botón izquierdo, el dedo o el lápiz (sin presión)
+
+    def _pointer_press(self, view: QPointF, t: int, eraser: bool = False) -> None:
+        if self.crop_active:
+            self._crop_press(view)
+        elif self._curtain_hit(view) and not self.busy:
+            self._curtain_press(view)
+        elif self.ctrl.tool == Tool.LASER and self.ctrl.drawing and not eraser:
+            self._laser_press(view)
+        elif self._pan_from is None:
+            self._begin(self.to_canvas(view), None, t, eraser=eraser)
+
+    def _pointer_move(self, view: QPointF, t: int, modifiers) -> None:
+        if self.crop_active:
+            self._crop_move(view)
+        elif self._curtain_drag is not None:
+            self._curtain_move(view)
+        elif self._laser is not None:
+            self._laser_move(view)
+        else:
+            self._move(self.to_canvas(view), None, t, modifiers)
+
+    def _pointer_release(self, view: QPointF, t: int, modifiers) -> None:
+        if self.crop_active:
+            self._crop_release(view)
+        elif self._curtain_drag is not None:
+            self._curtain_drag = None
+        elif self._laser is not None:
+            self._laser_release()
+        else:
+            self._release(self.to_canvas(view), None, t, modifiers)
+
     def mousePressEvent(self, e):  # noqa: N802
-        if self._tablet_active:
+        if self._tablet_active or self._touch_active:
             return
         btn = e.button()
         view = e.position()
-        if btn == Qt.MouseButton.LeftButton and self._curtain_hit(view) and not self.busy:
-            self._curtain_drag = self.curtain_y - view.y()
-            return
-        if btn == Qt.MouseButton.LeftButton and self.ctrl.tool == Tool.LASER and self.ctrl.drawing:
-            self._laser_press(view)
-            return
-        if btn == Qt.MouseButton.LeftButton and self._pan_from is None:
-            self._begin(self.to_canvas(view), None, e.timestamp())
+        if btn == Qt.MouseButton.LeftButton:
+            self._pointer_press(view, e.timestamp())
+        elif self.crop_active:
+            if btn == Qt.MouseButton.RightButton:
+                self.ctrl.crop_finished(self, None)
         elif btn == Qt.MouseButton.RightButton and self.busy:
             self.cancel_current()
         elif btn in (Qt.MouseButton.RightButton, Qt.MouseButton.MiddleButton) and self.zoom_active:
@@ -1221,35 +1543,28 @@ class Overlay(QWidget):
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
 
     def mouseMoveEvent(self, e):  # noqa: N802
-        if self._tablet_active:
+        if self._tablet_active or self._touch_active:
             return
         view = e.position()
-        if self._curtain_drag is not None:
-            self.set_curtain(view.y() + self._curtain_drag)
-        elif self._laser is not None:
-            self._laser_move(view)
-        elif self._pan_from is not None:
+        if self._pan_from is not None:
             start, tl = self._pan_from
             delta = view - start
             self._zoom_tl = QPointF(tl.x() - delta.x() / self._zoom, tl.y() - delta.y() / self._zoom)
             self._clamp_zoom()
             self.update()
-        elif e.buttons() & Qt.MouseButton.LeftButton:
-            self._move(self.to_canvas(view), None, e.timestamp(), e.modifiers())
+        elif (self.crop_active or self._curtain_drag is not None or self._laser is not None
+              or e.buttons() & Qt.MouseButton.LeftButton):
+            self._pointer_move(view, e.timestamp(), e.modifiers())
 
     def mouseReleaseEvent(self, e):  # noqa: N802
-        if self._tablet_active:
+        if self._tablet_active or self._touch_active:
             return
         btn = e.button()
-        if btn == Qt.MouseButton.LeftButton and self._curtain_drag is not None:
-            self._curtain_drag = None
-        elif btn == Qt.MouseButton.LeftButton and self._laser is not None:
-            self._laser_release()
+        if btn == Qt.MouseButton.LeftButton:
+            self._pointer_release(e.position(), e.timestamp(), e.modifiers())
         elif btn in (Qt.MouseButton.RightButton, Qt.MouseButton.MiddleButton) and self._pan_from is not None:
             self._pan_from = None
             self.ctrl.refresh_cursor(self)
-        elif btn == Qt.MouseButton.LeftButton:
-            self._release(self.to_canvas(e.position()), None, e.timestamp(), e.modifiers())
 
     def tabletEvent(self, e):  # noqa: N802
         """Lápiz de tableta / Windows Ink: usa la presión real si el dispositivo la ofrece."""
@@ -1260,11 +1575,22 @@ class Overlay(QWidget):
         pos = self.to_canvas(view)
         t = e.type()
         laser = self.ctrl.tool == Tool.LASER and self.ctrl.drawing
+        if self.crop_active:
+            if t == QEvent.Type.TabletPress:
+                self._tablet_active = True
+                self._crop_press(view)
+            elif t == QEvent.Type.TabletMove and self._tablet_active:
+                self._crop_move(view)
+            elif t == QEvent.Type.TabletRelease:
+                self._tablet_active = False
+                self._crop_release(view)
+            e.accept()
+            return
         if t == QEvent.Type.TabletPress:
             eraser = e.pointerType() == QPointingDevice.PointerType.Eraser
             self._tablet_active = True
             if self._curtain_hit(view) and not self.busy:
-                self._curtain_drag = self.curtain_y - view.y()
+                self._curtain_press(view)
             elif laser and not eraser:
                 self._laser_press(view)
             else:
@@ -1272,7 +1598,7 @@ class Overlay(QWidget):
         elif t == QEvent.Type.TabletMove:
             if self._tablet_active:
                 if self._curtain_drag is not None:
-                    self.set_curtain(view.y() + self._curtain_drag)
+                    self._curtain_move(view)
                 elif self._laser is not None:
                     self._laser_move(view)
                 else:
@@ -1287,6 +1613,115 @@ class Overlay(QWidget):
                     self._release(pos, pressure, e.timestamp(), e.modifiers())
             self._tablet_active = False
         e.accept()
+
+    # ------------------------------------------------------------------ pantalla táctil
+
+    def _abort_for_gesture(self) -> None:
+        """Al apoyar un segundo dedo se descarta lo que empezó el primero (era un gesto)."""
+        self._laser = None
+        self._curtain_drag = None
+        self._crop_from = None
+        if self._sel_mode is not None:
+            self._sel_mode = None
+            self._lasso = []
+            self._sel_img = None
+            self.rebuild()
+        if self._stroke is not None and self._stroke.tool == Tool.ERASER:
+            self._stroke = None  # la goma ya borró en el lienzo: se reconstruye sin ella
+            self._state = None
+            self.rebuild()
+        else:
+            self.cancel_current()
+        self.update()
+
+    def _touch_event(self, ev) -> None:
+        t = ev.type()
+        now = ev.timestamp()
+        g = self._touch
+        if t == QEvent.Type.TouchCancel:
+            if g is not None and g["mode"] == "one":
+                self._abort_for_gesture()
+            self._touch = None
+            self._touch_active = False
+            ev.accept()
+            return
+        if t == QEvent.Type.TouchBegin or g is None:
+            g = self._touch = {"mode": "one", "t0": now, "start": {}, "cur": {}, "primary": None,
+                               "fingers": 0, "moved": 0.0, "zoom0": None}
+            self._touch_active = True
+        for pt in ev.points():
+            if pt.state() == QEventPoint.State.Stationary:
+                continue  # no se movió (y algunos dispositivos no repiten su posición)
+            pid, pos = pt.id(), QPointF(pt.position())
+            if pt.state() == QEventPoint.State.Pressed:
+                g["start"][pid] = QPointF(pos)
+            g["cur"][pid] = pos
+            if pid in g["start"]:
+                d = g["start"][pid]
+                g["moved"] = max(g["moved"], math.hypot(pos.x() - d.x(), pos.y() - d.y()))
+        down = [pt for pt in ev.points() if pt.state() != QEventPoint.State.Released]
+        g["fingers"] = max(g["fingers"], len(ev.points()))
+        mods = ev.modifiers()
+
+        if g["mode"] == "one":
+            if g["primary"] is None and len(ev.points()) == 1:
+                pt = ev.points()[0]
+                g["primary"] = pt.id()
+                size = max(pt.ellipseDiameters().width(), pt.ellipseDiameters().height())
+                palm = size >= PALM_SIZE
+                if palm:  # la palma borra, con una goma del tamaño del contacto
+                    g["palm_size"] = self.ctrl.sizes[Tool.ERASER]
+                    self.ctrl.sizes[Tool.ERASER] = int(min(250, max(size, self.ctrl.sizes[Tool.ERASER])))
+                self._pointer_press(QPointF(pt.position()), now, eraser=palm)
+            elif len(ev.points()) >= 2 and g["primary"] is not None:
+                if now - g["t0"] <= TOUCH_MULTI_MS and g["moved"] < TOUCH_SLOP:
+                    self._abort_for_gesture()
+                    g["mode"] = "multi"
+                # (si llega tarde, el segundo dedo se ignora y se sigue dibujando con el primero)
+            elif len(ev.points()) >= 2:  # varios dedos a la vez desde el principio
+                g["mode"] = "multi"
+            if g["mode"] == "one" and g["primary"] is not None:
+                prim = next((pt for pt in ev.points() if pt.id() == g["primary"]), None)
+                if prim is not None and prim.state() == QEventPoint.State.Released:
+                    self._pointer_release(QPointF(prim.position()), now, mods)
+                    g["primary"] = -1  # ya soltado
+                    self._restore_palm(g)
+                elif prim is not None and prim.state() == QEventPoint.State.Updated:
+                    self._pointer_move(QPointF(prim.position()), now, mods)
+        if g["mode"] == "multi" and self.zoom_active and len(down) >= 2:
+            self._touch_pinch(g, down)
+
+        if t == QEvent.Type.TouchEnd:
+            if g["mode"] == "multi" and g["moved"] < TOUCH_SLOP and now - g["t0"] <= TOUCH_TAP_MS:
+                if g["fingers"] == 2:
+                    self.ctrl.undo()  # toque con dos dedos: deshacer
+                elif g["fingers"] >= 3:
+                    self.ctrl.redo()  # toque con tres dedos: rehacer
+            elif g["mode"] == "one" and g["primary"] not in (None, -1):
+                self._pointer_release(g["cur"].get(g["primary"], QPointF()), now, mods)
+                self._restore_palm(g)
+            self._touch = None
+            self._touch_active = False
+        ev.accept()
+
+    def _restore_palm(self, g: dict) -> None:
+        if "palm_size" in g:
+            self.ctrl.sizes[Tool.ERASER] = g.pop("palm_size")
+
+    def _touch_pinch(self, g: dict, down) -> None:
+        """Con el zoom activo, dos dedos acercan/alejan (pellizcar) y desplazan la vista."""
+        a, b = QPointF(down[0].position()), QPointF(down[1].position())
+        center = QPointF((a.x() + b.x()) / 2, (a.y() + b.y()) / 2)
+        dist = max(1.0, math.hypot(a.x() - b.x(), a.y() - b.y()))
+        if g["zoom0"] is None:
+            g["zoom0"] = (self._zoom, dist, self.to_canvas(center))
+            return
+        z0, d0, anchor = g["zoom0"]
+        self._zoom = max(ZOOM_MIN, min(ZOOM_MAX, z0 * dist / d0))
+        self._zoom_tl = QPointF(anchor.x() - center.x() / self._zoom, anchor.y() - center.y() / self._zoom)
+        self._clamp_zoom()
+        self.ctrl.zoom_changed(self)
+        self.update()
 
     def wheelEvent(self, e):  # noqa: N802
         d = e.angleDelta().y() or e.angleDelta().x()
@@ -1334,11 +1769,11 @@ def make_stamp_cursor(stamp, view_size: float, dpr: float) -> QCursor:
 
 def make_tool_cursor(tool: Tool, size: float, dpr: float) -> QCursor:
     """Cursor que muestra el tamaño real del pincel / goma (``size`` ya en píxeles de la vista)."""
-    if tool in SHAPE_TOOLS or tool == Tool.STAMP:
+    if tool in SHAPE_TOOLS or tool in (Tool.STAMP, Tool.COVER):
         return QCursor(Qt.CursorShape.CrossCursor)
     if tool == Tool.SELECT:
         return QCursor(Qt.CursorShape.ArrowCursor)
-    if tool == Tool.TEXT:
+    if tool in (Tool.TEXT, Tool.NOTE):
         return QCursor(Qt.CursorShape.IBeamCursor)
     if tool == Tool.LASER:
         return QCursor(Qt.CursorShape.BlankCursor)  # el punto láser lo dibuja la pizarra

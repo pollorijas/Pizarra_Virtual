@@ -189,7 +189,7 @@ def test_native_global_hotkey_messages(qapp, tmp_path, monkeypatch):
         c.start()
         _settle(qapp)
         ids = sorted(c.hotkeys._callbacks)
-        assert len(ids) == 7, "no se registraron todos los atajos globales"
+        assert len(ids) == 9, "no se registraron todos los atajos globales"
         _, _, user32 = _win32()
         assert c.drawing
         user32.PostMessageW(c.hotkeys._hwnd, WM_HOTKEY, ids[0], 0)  # Ctrl+Alt+D
@@ -610,3 +610,184 @@ def test_native_v14_recognition_select_paste_and_timer(ctrl, qapp):
     _real_mouse(qapp, [(c.x(), c.y()), (c.x(), c.y())], dpr)
     assert not w.running  # en pausa
     _grab("temporizador.png")
+
+
+def test_native_v15_crop_keys_curtain_and_cover(ctrl, qapp, tmp_path):
+    """Recortar zona con la pantalla real y el ratón real; teclas reales mostradas en pantalla;
+    cortina desde la izquierda y zona tapada que se descubre con un clic real."""
+    from PIL import Image
+    from PySide6.QtCore import QPoint
+    from PySide6.QtGui import QCursor
+
+    from pizarra_virtual.items import CoverItem, DeleteItem, ImageItem
+    from pizarra_virtual.tools import Tool
+
+    _, _, user32 = _win32()
+    ov = _overlay(ctrl)
+    dpr = ov.devicePixelRatioF()
+    _settle(qapp)
+    x0 = max(ctrl.toolbar.geometry().right() + 60, 300)
+    x1 = min(ov.width() - 40, x0 + 200)
+    _draw_red_line(ctrl, ov, y=260, x0=x0, x1=x1)
+
+    # 1) Recortar zona (con lo dibujado): el PNG guardado contiene solo esa parte, con la línea
+    QCursor.setPos(ov.mapToGlobal(QPoint(x0, 200)))
+    ctrl.start_crop()
+    _settle(qapp, 1000)
+    assert ctrl.crop_active
+    _grab("recortar_zona.png")
+    _real_mouse(qapp, [(x0 - 20, 230), (x0 + 60, 260), (x1 + 20, 290)], dpr)
+    assert not ctrl.crop_active
+    files = list((tmp_path / "Pictures" / "Capturas Pizarra").glob("*.png"))
+    assert len(files) == 1
+    img = Image.open(files[0]).convert("RGB")
+    w_expected = (x1 + 20 - (x0 - 20)) * dpr
+    assert abs(img.size[0] - w_expected) <= 2 and abs(img.size[1] - 60 * dpr) <= 2
+    assert _is_red(img.getpixel((img.size[0] // 2, img.size[1] // 2)))
+
+    # 2) Recortar y pegar en la pizarra: queda una imagen en el mismo lugar
+    ctrl.start_crop(with_drawing=False, to_board=True)
+    _settle(qapp, 1000)
+    _real_mouse(qapp, [(x0, 320), (x0 + 50, 350), (x0 + 100, 380)], dpr)
+    item = ctrl.history[-1][1]
+    assert isinstance(item, ImageItem) and abs(item.x - x0) <= 1 and abs(item.w - 100) <= 1
+
+    # 3) Teclas reales: Ctrl + Mayús + K se muestra; una letra sola, no
+    ctrl.set_tool(Tool.BRUSH)
+    ctrl.toggle_show_keys()
+    QCursor.setPos(ov.mapToGlobal(QPoint(x0, 200)))
+    _settle(qapp, 200)
+    for vk in (0x11, 0x10, 0x4B):
+        user32.keybd_event(vk, 0, 0, 0)
+        _settle(qapp, 60)
+    for vk in (0x4B, 0x10, 0x11):
+        user32.keybd_event(vk, 0, 2, 0)
+    _settle(qapp, 150)
+    user32.keybd_event(0x51, 0, 0, 0)  # Q (rectángulo redondeado): se pulsa, pero no se muestra
+    _settle(qapp, 60)
+    user32.keybd_event(0x51, 0, 2, 0)
+    _settle(qapp, 150)
+    assert ov.keys_shown == ["Ctrl + Mayús + K"], ov.keys_shown
+    _grab("teclas_en_pantalla.png")
+    ctrl.toggle_show_keys()
+
+    # 4) Cortina desde la izquierda, arrastrada con el ratón real
+    ctrl.set_tool(Tool.BRUSH)
+    ctrl.show_curtain("left")
+    _settle(qapp, 200)
+    grab_x = ov.width() // 2
+    _real_mouse(qapp, [(grab_x, 300), (grab_x + 20, 300), (grab_x + 40, 300)], dpr)
+    assert abs(ov.curtain - 40) <= 2 and ov.curtain_side == "left"
+    _grab("cortina_izquierda.png")
+    ctrl.toggle_curtain()
+
+    # 5) Tapar zona con el ratón real y descubrirla con un clic real
+    ctrl.set_tool(Tool.COVER)
+    _settle(qapp, 200)
+    _real_mouse(qapp, [(x0 - 10, 240), (x0 + 50, 260), (x1, 285)], dpr)
+    cover = ctrl.history[-1][1]
+    assert isinstance(cover, CoverItem)
+    shot = _grab("zona_tapada.png")
+    assert not _is_red(shot.getpixel((round((x0 + 100) * dpr), round(260 * dpr))))  # la línea no se ve
+    _real_mouse(qapp, [(x0 + 30, 250), (x0 + 30, 250)], dpr)
+    assert isinstance(ctrl.history[-1][1], DeleteItem)
+    shot = _grab("zona_descubierta.png")
+    assert _is_red(shot.getpixel((round((x0 + 100) * dpr), round(260 * dpr))))
+
+
+def _touch_injection():
+    """Inyección de toques REALES de Windows (InjectTouchInput), como una pantalla táctil."""
+    import ctypes
+    from ctypes import wintypes
+
+    class POINTER_INFO(ctypes.Structure):  # noqa: N801
+        _fields_ = [("pointerType", ctypes.c_uint32), ("pointerId", ctypes.c_uint32),
+                    ("frameId", ctypes.c_uint32), ("pointerFlags", ctypes.c_uint32),
+                    ("sourceDevice", wintypes.HANDLE), ("hwndTarget", wintypes.HWND),
+                    ("ptPixelLocation", wintypes.POINT), ("ptHimetricLocation", wintypes.POINT),
+                    ("ptPixelLocationRaw", wintypes.POINT), ("ptHimetricLocationRaw", wintypes.POINT),
+                    ("dwTime", wintypes.DWORD), ("historyCount", ctypes.c_uint32),
+                    ("InputData", ctypes.c_int32), ("dwKeyStates", wintypes.DWORD),
+                    ("PerformanceCount", ctypes.c_uint64), ("ButtonChangeType", ctypes.c_int)]
+
+    class POINTER_TOUCH_INFO(ctypes.Structure):  # noqa: N801
+        _fields_ = [("pointerInfo", POINTER_INFO), ("touchFlags", ctypes.c_uint32),
+                    ("touchMask", ctypes.c_uint32), ("rcContact", wintypes.RECT),
+                    ("rcContactRaw", wintypes.RECT), ("orientation", ctypes.c_uint32),
+                    ("pressure", ctypes.c_uint32)]
+
+    user32 = ctypes.windll.user32
+    user32.InitializeTouchInjection.argtypes = [ctypes.c_uint32, wintypes.DWORD]
+    user32.InjectTouchInput.argtypes = [ctypes.c_uint32, ctypes.POINTER(POINTER_TOUCH_INFO)]
+    if not user32.InitializeTouchInjection(10, 0x3):  # TOUCH_FEEDBACK_NONE
+        return None
+    DOWN, UPDATE, UP, INRANGE, INCONTACT = 0x10000, 0x20000, 0x40000, 0x2, 0x4
+
+    def frame(contacts):
+        """contacts: lista de (id, x, y, estado «down»/«move»/«up», ancho del contacto)."""
+        arr = (POINTER_TOUCH_INFO * len(contacts))()
+        for k, (pid, x, y, state, size) in enumerate(contacts):
+            t = arr[k]
+            t.pointerInfo.pointerType = 2  # PT_TOUCH
+            t.pointerInfo.pointerId = pid
+            t.pointerInfo.ptPixelLocation = wintypes.POINT(int(x), int(y))
+            t.pointerInfo.pointerFlags = {"down": DOWN | INRANGE | INCONTACT,
+                                          "move": UPDATE | INRANGE | INCONTACT, "up": UP}[state]
+            t.touchMask = 0x1 | 0x2 | 0x4  # área de contacto, orientación y presión
+            h = size // 2
+            t.rcContact = wintypes.RECT(int(x) - h, int(y) - h, int(x) + h, int(y) + h)
+            t.orientation = 90
+            t.pressure = 32000
+        return bool(user32.InjectTouchInput(len(contacts), arr))
+
+    return frame
+
+
+def test_native_v15_real_touch_draws_undoes_and_palm_erases(ctrl, qapp):
+    """Toques reales de Windows: un dedo dibuja, dos dedos a la vez deshacen, la palma borra."""
+    frame = _touch_injection()
+    if frame is None:
+        pytest.skip("este Windows no permite inyectar toques (InitializeTouchInjection)")
+    from pizarra_virtual.tools import Tool
+
+    ov = _overlay(ctrl)
+    dpr = ov.devicePixelRatioF()
+    ctrl.set_tool(Tool.BRUSH)
+    ctrl.set_size(16)
+    _settle(qapp)
+    x0 = max(ctrl.toolbar.geometry().right() + 60, 300)
+
+    def phys(x, y):
+        return round(x * dpr), round(y * dpr)
+
+    # 1) Un dedo dibuja una línea
+    assert frame([(0, *phys(x0, 250), "down", 10)])
+    _settle(qapp, 30)
+    for k in range(1, 21):
+        frame([(0, *phys(x0 + k * 10, 250), "move", 10)])
+        _settle(qapp, 15)
+    frame([(0, *phys(x0 + 200, 250), "up", 10)])
+    _settle(qapp, 300)
+    assert len(ctrl.history) == 1 and ctrl.history[0][1].tool == Tool.BRUSH
+    _grab("toque_dibuja.png")
+
+    # 2) La palma (contacto ancho) borra aunque la herramienta sea el pincel
+    frame([(0, *phys(x0 + 100, 250), "down", round(120 * dpr))])
+    _settle(qapp, 30)
+    for k in range(1, 6):
+        frame([(0, *phys(x0 + 100, 250 + k), "move", round(120 * dpr))])
+        _settle(qapp, 15)
+    frame([(0, *phys(x0 + 100, 255), "up", round(120 * dpr))])
+    _settle(qapp, 300)
+    last = ctrl.history[-1][1]
+    assert last.tool == Tool.ERASER, last.tool
+    assert ctrl.tool == Tool.BRUSH and ctrl.sizes[Tool.ERASER] < 120 * 2  # el tamaño de la goma se restaura
+
+    # 3) Toque con dos dedos a la vez: deshacer (la goma de la palma)
+    n = len(ctrl.history)
+    frame([(0, *phys(x0, 400), "down", 10), (1, *phys(x0 + 80, 400), "down", 10)])
+    _settle(qapp, 60)
+    frame([(0, *phys(x0, 400), "up", 10), (1, *phys(x0 + 80, 400), "up", 10)])
+    _settle(qapp, 300)
+    assert len(ctrl.history) == n - 1
+    assert all(item.tool == Tool.BRUSH for _k, item in ctrl.history)

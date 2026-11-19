@@ -33,6 +33,9 @@ class Tool(str, Enum):
     STAMP = "stamp"
     # Seleccionar y mover
     SELECT = "select"
+    # Nota adhesiva y zona tapada (v1.5)
+    NOTE = "note"
+    COVER = "cover"
 
 
 FREEHAND_TOOLS = (Tool.BRUSH, Tool.PENCIL, Tool.PEN, Tool.HIGHLIGHTER, Tool.ERASER)
@@ -101,6 +104,29 @@ TOOL_SPECS: dict[Tool, ToolSpec] = {
     Tool.BRACE: ToolSpec("Llave", "K", "brace", 4, 1, 40, 100),
     Tool.STAMP: ToolSpec("Sellos", "S", "stamp", 56, 20, 200, 100),
     Tool.SELECT: ToolSpec("Seleccionar y mover", "A", "select", 1, 1, 1, 100, has_opacity=False),
+    Tool.NOTE: ToolSpec("Nota adhesiva", "O", "note", 28, 12, 96, 100, has_opacity=False),
+    Tool.COVER: ToolSpec("Tapar zona", "H", "cover", 1, 1, 1, 100, has_opacity=False),
+}
+# Herramientas sin grosor ajustable
+UNSIZED_TOOLS = (Tool.SELECT, Tool.COVER)
+
+# Colores del papel de las notas adhesivas: clave -> (etiqueta, RGBA)
+NOTE_COLORS = {
+    "yellow": ("Amarilla", (255, 238, 128, 255)),
+    "pink": ("Rosada", (255, 190, 214, 255)),
+    "blue": ("Celeste", (176, 218, 255, 255)),
+    "green": ("Verde", (196, 238, 170, 255)),
+    "orange": ("Naranja", (255, 206, 140, 255)),
+    "white": ("Blanca", (250, 250, 250, 255)),
+}
+NOTE_TEXT_RGBA = (38, 50, 56, 255)
+
+# Lado desde el que se descubre la cortina: clave -> etiqueta
+CURTAIN_SIDES = {
+    "top": "Desde arriba",
+    "bottom": "Desde abajo",
+    "left": "Desde la izquierda",
+    "right": "Desde la derecha",
 }
 # Trazos a mano alzada que pueden convertirse en figuras perfectas («Reconocer formas»)
 RECOGNIZABLE_TOOLS = (Tool.BRUSH, Tool.PENCIL, Tool.PEN)
