@@ -745,6 +745,8 @@ def _touch_injection():
 
 def test_native_v15_real_touch_draws_undoes_and_palm_erases(ctrl, qapp):
     """Toques reales de Windows: un dedo dibuja, dos dedos a la vez deshacen, la palma borra."""
+    if os.environ.get("PIZARRA_TOUCH") != "1":
+        pytest.skip("se ejecuta en su propio paso, con la pantalla táctil virtual (PIZARRA_TOUCH=1)")
     frame = _touch_injection()
     if frame is None:
         pytest.skip("este Windows no permite inyectar toques (InitializeTouchInjection)")

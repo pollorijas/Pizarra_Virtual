@@ -1,8 +1,8 @@
 """Tamaño real del contacto de cada toque en Windows (para borrar con la palma).
 
 Qt no transmite el tamaño del contacto de los toques en Windows (lo deja en 1×1), así que
-se lee directamente: al llegar WM_POINTERDOWN de un toque se consulta GetPointerTouchInfo y
-se guarda el ancho de la zona de contacto (rcContact) en píxeles físicos. La pizarra lo
+se lee directamente: al llegar WM_POINTERDOWN o WM_POINTERUPDATE de un toque se consulta
+GetPointerTouchInfo y se guarda el ancho de la zona de contacto (rcContact) en píxeles físicos. La pizarra lo
 consulta al empezar el trazo.
 """
 from __future__ import annotations
@@ -16,6 +16,7 @@ from .winutil import IS_WINDOWS
 
 log = logging.getLogger(__name__)
 
+WM_POINTERUPDATE = 0x0245
 WM_POINTERDOWN = 0x0246
 PT_TOUCH = 2
 TOUCH_MASK_CONTACTAREA = 0x1
@@ -62,8 +63,8 @@ class TouchContacts(QAbstractNativeEventFilter):
             et = bytes(event_type.data()) if hasattr(event_type, "data") else bytes(event_type)
             if et == b"windows_generic_MSG":
                 msg = wintypes.MSG.from_address(int(message))
-                if msg.message == WM_POINTERDOWN:
-                    self.downs += 1
+                if msg.message in (WM_POINTERDOWN, WM_POINTERUPDATE):
+                    self.downs += msg.message == WM_POINTERDOWN
                     pid = int(msg.wParam) & 0xFFFF
                     kind = ctypes.c_uint32()
                     if _user32.GetPointerType(pid, ctypes.byref(kind)) and kind.value == PT_TOUCH:

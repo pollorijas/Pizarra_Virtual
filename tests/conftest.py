@@ -15,9 +15,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 def qapp():
     from PySide6.QtWidgets import QApplication
 
-    if sys.platform == "win32" and os.environ.get("QT_QPA_PLATFORM") == "windows":
+    if sys.platform == "win32" and os.environ.get("PIZARRA_TOUCH") == "1":
         # Pantalla táctil virtual (la de los toques inyectados en las pruebas nativas): debe existir
-        # antes de crear la aplicación para que Qt la detecte y entregue eventos táctiles.
+        # antes de crear la aplicación para que Qt la detecte y entregue eventos táctiles. Se usa
+        # solo en su propio paso de pruebas: con ella, el ratón simulado de las demás no llega igual.
         import ctypes
 
         ctypes.windll.user32.InitializeTouchInjection(10, 0x3)

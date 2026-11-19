@@ -66,6 +66,12 @@ jobs:
           QT_SCALE_FACTOR: "1.5"
         run: python -m pytest -q -rs
 
+      - name: Pruebas con toques reales de Windows (pantalla táctil virtual)
+        env:
+          QT_QPA_PLATFORM: windows
+          PIZARRA_TOUCH: "1"
+        run: python -m pytest -q -rs tests/test_windows_native.py -k touch
+
       - name: Subir capturas de las pruebas
         if: always()
         uses: actions/upload-artifact@v7

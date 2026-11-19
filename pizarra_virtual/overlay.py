@@ -52,6 +52,7 @@ TOUCH_MULTI_MS = 250    # un segundo dedo antes de este tiempo convierte el traz
 TOUCH_SLOP = 24         # px: más movimiento ya no es un «toque»
 TOUCH_TAP_MS = 500      # duración máxima de un toque con dos o tres dedos
 PALM_SIZE = 70          # px: un contacto más ancho es la palma (o el canto de la mano) → goma
+PALM_LATE_MS = 300      # hasta cuándo se acepta que el tamaño de la palma llegue tarde
 
 ZOOM_DEFAULT = 2.0
 ZOOM_MIN = 1.0
@@ -1669,12 +1670,10 @@ class Overlay(QWidget):
             if g["primary"] is None and len(ev.points()) == 1:
                 pt = ev.points()[0]
                 g["primary"] = pt.id()
-                size = max(pt.ellipseDiameters().width(), pt.ellipseDiameters().height(),
-                           self.ctrl.touch_contact_size() / (self.devicePixelRatioF() or 1.0))
+                size = self._contact_size(pt)
                 palm = size >= PALM_SIZE
-                if palm:  # la palma borra, con una goma del tamaño del contacto
-                    g["palm_size"] = self.ctrl.sizes[Tool.ERASER]
-                    self.ctrl.sizes[Tool.ERASER] = int(min(250, max(size, self.ctrl.sizes[Tool.ERASER])))
+                if palm:
+                    self._palm_eraser(g, size)
                 self._pointer_press(QPointF(pt.position()), now, eraser=palm)
             elif len(ev.points()) >= 2 and g["primary"] is not None:
                 if now - g["t0"] <= TOUCH_MULTI_MS and g["moved"] < TOUCH_SLOP:
@@ -1690,6 +1689,13 @@ class Overlay(QWidget):
                     g["primary"] = -1  # ya soltado
                     self._restore_palm(g)
                 elif prim is not None and prim.state() == QEventPoint.State.Updated:
+                    size = self._contact_size(prim)
+                    if "palm_size" not in g and size >= PALM_SIZE and now - g["t0"] <= PALM_LATE_MS:
+                        # Windows a veces informa el tamaño del contacto un instante después de
+                        # empezar: lo dibujado hasta ahora se descarta y se borra desde el inicio.
+                        self._abort_for_gesture()
+                        self._palm_eraser(g, size)
+                        self._pointer_press(g["start"].get(g["primary"], QPointF(prim.position())), now, eraser=True)
                     self._pointer_move(QPointF(prim.position()), now, mods)
         if g["mode"] == "multi" and self.zoom_active and len(down) >= 2:
             self._touch_pinch(g, down)
@@ -1706,6 +1712,16 @@ class Overlay(QWidget):
             self._touch = None
             self._touch_active = False
         ev.accept()
+
+    def _contact_size(self, pt) -> float:
+        """Ancho del contacto (px lógicos): el que da Qt o, en Windows, el que informa el sistema."""
+        return max(pt.ellipseDiameters().width(), pt.ellipseDiameters().height(),
+                   self.ctrl.touch_contact_size() / (self.devicePixelRatioF() or 1.0))
+
+    def _palm_eraser(self, g: dict, size: float) -> None:
+        """La palma borra, con una goma del tamaño del contacto (se restaura al levantarla)."""
+        g["palm_size"] = self.ctrl.sizes[Tool.ERASER]
+        self.ctrl.sizes[Tool.ERASER] = int(min(250, max(size, self.ctrl.sizes[Tool.ERASER])))
 
     def _restore_palm(self, g: dict) -> None:
         if "palm_size" in g:

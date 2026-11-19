@@ -612,3 +612,23 @@ def test_touch_mode_setting_is_loaded(qapp, tmp_path, monkeypatch):
         assert c.touch_mode and c.toolbar.btn > 40 and c.note_color == "green"
     finally:
         c.shutdown()
+
+
+@pytest.mark.parametrize("late", [False, True])
+def test_palm_erases_even_if_contact_size_arrives_late(ctrl, touch, late):
+    ov = _ov(ctrl)
+    ctrl.set_tool(Tool.BRUSH)
+    ctrl.set_size(20)
+    _drag(ov, [(200, 300), (400, 300)])
+    eraser_size = ctrl.sizes[Tool.ERASER]
+    contact = {"px": 0.0 if late else 120.0}
+    ctrl.touch_contact_size = lambda: contact["px"] * ov.devicePixelRatioF()
+    _seq(ov, touch).press(0, QPoint(300, 280), ov).commit()
+    contact["px"] = 120.0  # (si llega tarde, Windows lo informa en el primer movimiento)
+    for y in range(285, 325, 5):
+        _seq(ov, touch).move(0, QPoint(300, y), ov).commit()
+    _seq(ov, touch).release(0, QPoint(300, 320), ov).commit()
+    assert [item.tool for _k, item in ctrl.history] == [Tool.BRUSH, Tool.ERASER]
+    assert ctrl.history[-1][1].size >= 100  # goma del tamaño de la palma
+    assert ctrl.sizes[Tool.ERASER] == eraser_size and ctrl.tool == Tool.BRUSH
+    assert _canvas(ov, 300, 300).alpha() == 0
