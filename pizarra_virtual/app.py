@@ -14,7 +14,7 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QAction, QColor, QCursor, QGuiApplication, QImage
 from PySide6.QtWidgets import QApplication, QFileDialog, QInputDialog, QMenu, QMessageBox, QSystemTrayIcon
 
-from . import __version__, capture, icons, keyview, session, touchcontact, winutil
+from . import __version__, capture, icons, instruments, keyview, session, touchcontact, winutil
 from .hotkeys import MOD_ALT, MOD_CONTROL, MOD_SHIFT, GlobalHotkeys
 from . import templates
 from .items import (
@@ -817,6 +817,40 @@ class Controller(QObject):
             elif side in ("left", "right") and dx:
                 self.curtain_step(dx if side == "left" else -dx)
             return
+
+    # ================================================================== instrumentos de geometría
+
+    def instrument_visible(self, kind: str) -> bool:
+        return any(kind in ov.instruments for ov in self.overlays.values())
+
+    @property
+    def any_instrument(self) -> bool:
+        return any(ov.instruments for ov in self.overlays.values())
+
+    def toggle_instrument(self, kind: str) -> None:
+        """Muestra el instrumento (regla, transportador o compás) en la pantalla del cursor, o lo quita."""
+        if kind not in instruments.INSTRUMENTS:
+            return
+        if self.instrument_visible(kind):
+            for ov in self.overlays.values():
+                ov.hide_instrument(kind)
+        else:
+            if not self.drawing or not self.visible:
+                self.set_drawing(True)  # el instrumento se usa dibujando
+            ov = self.overlay_for_screen(self.current_screen()) or next(iter(self.overlays.values()), None)
+            if ov is not None:
+                ov.show_instrument(kind)
+        self._changed()
+
+    def hide_instruments(self) -> None:
+        for ov in self.overlays.values():
+            for kind in list(ov.instruments):
+                ov.hide_instrument(kind)
+        self._changed()
+
+    def instruments_changed(self) -> None:
+        """Un instrumento se cerró desde su propio botón."""
+        self._changed()
 
     # ================================================================== zoom
 
@@ -1652,6 +1686,7 @@ El <b>Manual de usuario</b> (PDF) explica todas las funciones.</p>
 <tr><td><b>S</b></td><td>Sellos (otra vez S: siguiente sello) · Plantillas: botón de la barra</td></tr>
 <tr><td><b>A</b> · <b>G</b> · <b>Ctrl+V</b></td><td>Seleccionar y mover · Formas perfectas · Pegar imagen o texto</td></tr>
 <tr><td><b>O</b> · <b>H</b> · <b>X</b></td><td>Nota adhesiva · Tapar zona (clic: descubrir) · Recortar zona</td></tr>
+<tr><td><b>I</b> · <b>Y</b> · <b>Mayús+C</b></td><td>Regla · Transportador · Compás (otra vez: quitarlo)</td></tr>
 <tr><td><b>Ctrl+A</b> · <b>Ctrl+D</b> · <b>Supr</b></td><td>Seleccionar todo · Duplicar · Eliminar lo seleccionado</td></tr>
 <tr><td><b>B</b> · <b>R</b> · <b>C</b></td><td>Tipo de pincel · Relleno de figuras · Color</td></tr>
 <tr><td><b>+ / -</b> o rueda</td><td>Grosor (tamaño de letra con Texto)</td></tr>
@@ -1670,7 +1705,10 @@ El <b>Manual de usuario</b> (PDF) explica todas las funciones.</p>
 Ctrl+V = pegar · flechas, Inicio y Fin = mover el cursor<br>
 <b>Pantalla táctil</b>: un dedo dibuja · toque con dos dedos = deshacer · con tres = rehacer ·
 con zoom, pellizcar acerca y aleja<br>
-<b>Clic sobre un texto ya escrito</b> = editarlo (arrástralo para moverlo)</td></tr>
+<b>Clic sobre un texto ya escrito</b> = editarlo (arrástralo para moverlo)<br>
+<b>Regla y transportador</b>: arrástralos para moverlos; el botón azul los gira (rueda: 1°).
+Un trazo que empieza junto a su borde sale recto (o sigue el arco) ·
+<b>Compás</b>: arrastra la pata amarilla para abrirlo y gira la punta del lápiz para dibujar</td></tr>
 </table>
 <p>Las capturas se guardan en:<br><code>{folder}</code></p>
 """

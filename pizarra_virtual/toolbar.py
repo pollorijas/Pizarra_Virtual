@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (
     QPushButton, QSizePolicy, QSlider, QToolButton, QVBoxLayout, QWidget,
 )
 
-from . import icons
+from . import icons, instruments
 from . import templates
 from .tools import (
     BACKGROUNDS, BRUSH_LABELS, CURTAIN_SIDES, EXTRA_SHAPES, FILLABLE_SHAPES, MAIN_TOOLS, NOTE_COLORS, PALETTE,
@@ -47,6 +47,7 @@ QMenu::item:selected { background: #2f6fd1; }
 """
 
 BTN = 32
+INSTRUMENT_KEYS = {"ruler": "I", "protractor": "Y", "compass": "Shift+C"}
 COL_WIDTH = 3 * BTN + 2 * 4
 # Modo táctil: además de los botones más grandes, letras, menús y deslizadores más cómodos para el dedo
 TOUCH_STYLE = """
@@ -199,6 +200,20 @@ class Toolbar(QWidget):
             menu.addAction("Quitar la cortina\tV").triggered.connect(lambda: c.toggle_curtain())
         return menu
 
+    def build_instruments_menu(self, menu: QMenu | None = None) -> QMenu:
+        menu = menu if menu is not None else QMenu(self)
+        menu.clear()
+        c = self.ctrl
+        for kind, label in instruments.INSTRUMENTS.items():
+            act = menu.addAction(icons.icon(kind), f"{label}\t{INSTRUMENT_KEYS[kind]}")
+            act.setCheckable(True)
+            act.setChecked(c.instrument_visible(kind))
+            act.triggered.connect(lambda _c=False, k=kind: c.toggle_instrument(k))
+        if c.any_instrument:
+            menu.addSeparator()
+            menu.addAction("Quitar los instrumentos").triggered.connect(lambda: c.hide_instruments())
+        return menu
+
     def build_templates_menu(self, menu: QMenu | None = None) -> QMenu:
         menu = menu if menu is not None else QMenu(self)
         menu.clear()
@@ -315,8 +330,13 @@ class Toolbar(QWidget):
         # Notas adhesivas (el temporizador va con la presentación)
         self.note_btn = self._menu_button("note", "Nota adhesiva  [O]: haz clic donde quieras pegarla y escribe.\n"
                                                   "Elige aquí el color del papel.", self.build_notes_menu)
+        self.instruments_btn = self._menu_button(
+            "ruler", "Instrumentos de geometría: regla [I], transportador [Y] y compás [Mayús+C].\n"
+                     "Arrástralos para moverlos; el botón azul los gira. Un trazo que empieza\n"
+                     "junto a la regla sale recto; el compás dibuja al girar la punta del lápiz.",
+            self.build_instruments_menu)
         for k, b in enumerate((self.more_shapes_btn, self.stamp_btn, self.templates_btn,
-                               self.select_btn, self.paste_btn, self.note_btn)):
+                               self.select_btn, self.note_btn, self.instruments_btn)):
             grid.addWidget(b, (n + k) // 3, (n + k) % 3)
         c1.addLayout(grid)
 
@@ -411,11 +431,10 @@ class Toolbar(QWidget):
         self.opacity_slider.valueChanged.connect(lambda v: self.ctrl.set_opacity(v))
         c2.addWidget(self.opacity_slider)
 
-        # Fondo
-        bg_label = QLabel("Fondo")
-        c2.addWidget(bg_label)
+        # Fondo (sin rótulo: la barra debe caber en pantallas bajas)
         self.bg_combo = QComboBox()
         self.bg_combo.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.bg_combo.setToolTip("Fondo de la pizarra: transparente, oscurecer el escritorio, blanca o verde")
         for key, label in BACKGROUNDS.items():
             self.bg_combo.addItem(label, key)
         self.bg_combo.currentIndexChanged.connect(
@@ -510,7 +529,8 @@ class Toolbar(QWidget):
         quit_btn = self._tool_button("power", "Salir de Pizarra Virtual")
         quit_btn.clicked.connect(self.ctrl.quit)
 
-        buttons = (undo, redo, clear, self.zoom_btn, capture, folder, self.hide_btn, help_btn, quit_btn)
+        buttons = (undo, redo, clear, self.zoom_btn, capture, self.paste_btn, folder, self.hide_btn, help_btn,
+                   quit_btn)
         for idx, b in enumerate(buttons):
             actions.addWidget(b, idx // 3, idx % 3)
         c2.addLayout(actions)
@@ -558,6 +578,9 @@ class Toolbar(QWidget):
         add("Ctrl+Alt+F", c.toggle_spotlight)
         add("Ctrl+Alt+M", c.toggle_highlight)
         add("C", self.pick_color)
+        add("I", lambda: c.toggle_instrument("ruler"))
+        add("Y", lambda: c.toggle_instrument("protractor"))
+        add("Shift+C", lambda: c.toggle_instrument("compass"))
         add("+", lambda: c.step_size(1))
         add("-", lambda: c.step_size(-1))
         add("]", lambda: c.step_size(1))
@@ -655,17 +678,22 @@ class Toolbar(QWidget):
             self.refit()
         else:
             avail = self._current_screen().availableGeometry()
-            # Se mide con TODAS las opciones visibles (tipo de pincel, relleno, opacidad) para
-            # que la disposición no dependa de la herramienta activa ni cambie al cambiarla.
-            optional = (self.brush_combo, self.fill_btn, self.bold_btn, self.opacity_label, self.opacity_slider)
-            hidden = [w for w in optional if w.isHidden()]
-            for w in hidden:
+            # Se mide con las opciones de la herramienta que más ocupa (el pincel: tipo de pincel,
+            # formas perfectas, grosor y opacidad) para que la disposición no dependa de la
+            # herramienta activa ni cambie al cambiarla. Relleno y negrita nunca se ven con el pincel.
+            shown = (self.brush_combo, self.recognize_btn, self.size_label, self.size_slider,
+                     self.opacity_label, self.opacity_slider)
+            unshown = (self.fill_btn, self.bold_btn)
+            saved = {w: not w.isHidden() for w in shown + unshown}
+            for w in shown:
                 w.setVisible(True)
+            for w in unshown:
+                w.setVisible(False)
             self.body_layout.setDirection(QBoxLayout.Direction.TopToBottom)
             self.refit()
             needed = self.height()
-            for w in hidden:
-                w.setVisible(False)
+            for w, vis in saved.items():
+                w.setVisible(vis)
             if needed > avail.height():
                 self.body_layout.setDirection(QBoxLayout.Direction.LeftToRight)
             self.refit()
@@ -701,6 +729,7 @@ class Toolbar(QWidget):
                                                     else "shapes_more"))
             self.stamp_btn.setChecked(c.tool == Tool.STAMP)
             self.note_btn.setChecked(c.tool == Tool.NOTE)
+            self.instruments_btn.setChecked(c.any_instrument)
             self.keys_btn.setChecked(c.show_keys)
             self.touch_btn.setChecked(c.touch_mode)
             self.stamp_btn.setIcon(icons.icon("stamp_" + c.stamp_kind if c.tool == Tool.STAMP else "stamp"))

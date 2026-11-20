@@ -9,6 +9,28 @@ incompatibles.
 Cada versión publicada debe tener su sección aquí: el flujo de publicación de GitHub Actions se
 detiene si falta.
 
+## [Sin publicar]
+
+### Añadido
+- **Regla, transportador y compás** (botón de la regla en la barra, teclas **I**, **Y** y
+  **Mayús+C**). Se colocan encima de la pizarra, se mueven arrastrándolos, giran con su botón azul o
+  con la rueda del ratón (los ángulos de 15° atraen; con Mayús el giro es libre) y se quitan con su
+  botón rojo. No forman parte del dibujo ni del historial.
+  - **Regla** con escala en centímetros reales de la pantalla: un trazo que empieza junto a uno de
+    sus bordes sale recto, pegado al borde.
+  - **Transportador** de 180° con aguja para medir ángulos (el número grande indica los grados),
+    tamaño ajustable; los trazos junto al arco siguen el arco y junto a la base salen rectos.
+  - **Compás**: se abre con la pata del lápiz (indica el radio en cm) y dibuja arcos o
+    circunferencias completas al girar la punta del lápiz, con el color y el grosor actuales.
+
+### Cambiado
+- La barra hace sitio al nuevo botón: **Pegar** pasa al grupo de acciones (junto a la captura) y el
+  desplegable del fondo ya no lleva el rótulo «Fondo» (lo explica su descripción emergente).
+- La barra mide su altura con las opciones de la herramienta que más ocupa (el pincel), no con
+  todas a la vez, para decidir si va en una o dos columnas.
+- Simplificación interna del borrado con la palma, de la cancelación del recorte y de la lectura del
+  tamaño de los toques (sin cambios de comportamiento).
+
 ## [1.5.1] - 2026-11-19
 
 ### Corregido

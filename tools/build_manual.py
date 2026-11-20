@@ -441,7 +441,33 @@ def _v15_images(ctrl, ov, app) -> dict[str, QImage]:
     out["recorte.png"] = _crop(ov.grab().toImage(), W, H)
     ov.end_crop()
 
-    # 6) Barra en modo táctil
+    # 6) Regla, transportador y compás sobre papel cuadriculado
+    ctrl.clear_all()
+    ctrl.set_background("white")
+    ctrl.set_pattern("grid")
+    ctrl.set_tool(Tool.BRUSH)
+    ctrl.set_color(QColor("#1e88e5"))
+    ctrl.set_size(5)
+    for kind in ("ruler", "protractor", "compass"):
+        ctrl.toggle_instrument(kind)
+    ruler, pr, comp = (ov.instruments[k] for k in ("ruler", "protractor", "compass"))
+    ruler.x, ruler.y = 30 + ruler.length / 2, 70
+    ruler.set_angle(0, free=True)
+    y = ruler.y + ruler.width / 2 + 8
+    _drag(ov, [(70 + i * 12, y + (i % 3) * 4) for i in range(30)])  # recto, junto a la regla
+    pr.x, pr.y, pr.radius, pr.measure = 230, 420, 170, 50
+    comp.x, comp.y, comp.radius = 600, 330, 100
+    ctrl.set_color(QColor("#e53935"))
+    q = comp.pencil()
+    pts = [(q.x(), q.y())] + [(600 + 150 * math.cos(math.radians(-i * 6)), 330 + 150 * math.sin(math.radians(-i * 6)))
+                              for i in range(1, 46)]
+    _drag(ov, pts)  # arco de 270° con el compás
+    app.processEvents()
+    out["instrumentos.png"] = _crop(ov.grab().toImage())
+    ctrl.hide_instruments()
+    ctrl.set_color(QColor("#e53935"))
+
+    # 7) Barra en modo táctil
     ctrl.set_touch_mode(True)
     QTest.qWait(50)
     tb = ctrl.toolbar

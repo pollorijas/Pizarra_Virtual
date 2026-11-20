@@ -16,6 +16,10 @@ desvanece. Se dibujan en coordenadas de la ventana, encima de todo.
 
 Modo recorte: la superposición muestra la pantalla congelada y se arrastra un
 rectángulo para recortar esa zona como imagen.
+
+Instrumentos de geometría (regla, transportador, compás): se dibujan encima de la hoja, en
+coordenadas del lienzo (con zoom se amplían con él). Tampoco forman parte del historial; solo
+guían los trazos (ver ``instruments``).
 """
 from __future__ import annotations
 
@@ -32,12 +36,12 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import QWidget
 
-from . import render, shape_recognition, winutil
+from . import instruments, render, shape_recognition, winutil
 from .items import (
     ClearItem, CoverItem, DeleteItem, NoteItem, ShapeItem, StrokeItem, TextEditItem, TextItem, TransformItem,
     transformed,
 )
-from .tools import NOTE_TEXT_RGBA, RECOGNIZABLE_TOOLS, SHAPE_TOOLS, Tool
+from .tools import GUIDED_TOOLS, NOTE_TEXT_RGBA, RECOGNIZABLE_TOOLS, SHAPE_TOOLS, Tool
 
 if TYPE_CHECKING:  # pragma: no cover
     from .app import Controller
@@ -219,6 +223,13 @@ class Overlay(QWidget):
         self._ripples: list[tuple[QPointF, float, QColor]] = []
         self._laser: LaserTrail | None = None
         self._trails: list[LaserTrail] = []
+
+        # Instrumentos de geometría visibles en esta pantalla (tipo -> instrumento), el que se
+        # está arrastrando y la guía del trazo en curso (regla o transportador)
+        self.instruments: dict[str, instruments.Instrument] = {}
+        self._inst: instruments.Instrument | None = None
+        self._guide = None
+        self._guided = False  # el trazo en curso lo guía un instrumento (no se «reconoce» como figura)
 
         self.winId()  # crea la ventana nativa para poder asignarle la pantalla
         if self.windowHandle() is not None:
@@ -587,6 +598,7 @@ class Overlay(QWidget):
             if pattern is not None:
                 p.drawImage(QPointF(0, 0), pattern)
             self._draw_drawing(p)
+        self._paint_instruments(p)
         self._paint_effects(p, ev.rect())
         if self.zoom_active and self._zoom_hint:
             self._paint_zoom_hint(p)
@@ -891,6 +903,97 @@ class Overlay(QWidget):
     def _curtain_move(self, view: QPointF) -> None:
         self.move_curtain_edge(self._curtain_axis(view) + self._curtain_drag)
 
+    # ------------------------------------------------------------------ instrumentos de geometría
+
+    def px_per_cm(self) -> float:
+        return instruments.px_per_cm(self._screen)
+
+    def show_instrument(self, kind: str) -> instruments.Instrument:
+        """Pone el instrumento en el centro de lo que se ve (si ya estaba, lo deja donde está)."""
+        inst = self.instruments.get(kind)
+        if inst is None:
+            center = self.to_canvas(QPointF(self.width() / 2, self.height() / 2))
+            inst = instruments.create(kind, center, self.width(), self.height(), self.px_per_cm(),
+                                      self.ctrl.touch_scale)
+            self.instruments[kind] = inst
+        self.update(self._view_rect(inst.bounds(self.ctrl.touch_scale)))
+        return inst
+
+    def hide_instrument(self, kind: str) -> None:
+        inst = self.instruments.get(kind)
+        if inst is None:
+            return
+        if inst is self._inst:
+            self.cancel_current()
+        del self.instruments[kind]
+        self.update(self._view_rect(inst.bounds(self.ctrl.touch_scale)))
+
+    def instrument_at(self, view: QPointF) -> tuple[instruments.Instrument, str] | None:
+        """Instrumento (el de más arriba) y parte bajo un punto de la ventana."""
+        if not self.instruments or not self.ctrl.drawing:
+            return None
+        pos, k = self.to_canvas(view), self.ctrl.touch_scale
+        for inst in reversed(list(self.instruments.values())):
+            part = inst.hit(pos, k)
+            if part is not None:
+                return inst, part
+        return None
+
+    def guide_at(self, pos: QPointF, width: float):
+        """Guía para un trazo que empieza en ``pos`` (junto al borde de un instrumento), o None."""
+        k = self.ctrl.touch_scale
+        for inst in reversed(list(self.instruments.values())):
+            guide = inst.guide(pos, k, width)
+            if guide is not None:
+                return guide
+        return None
+
+    def _instrument_press(self, view: QPointF, t: int) -> bool:
+        """Pulsación sobre un instrumento: lo mueve, gira, cierra… o, con el compás, dibuja."""
+        hit = self.instrument_at(view)
+        if hit is None:
+            return False
+        inst, part = hit
+        self.finish_current()
+        if part == "close":
+            self.hide_instrument(inst.kind)
+            self.ctrl.instruments_changed()
+            return True
+        # El instrumento pasa a estar delante de los demás
+        self.instruments[inst.kind] = self.instruments.pop(inst.kind)
+        pos = self.to_canvas(view)
+        inst.press(part, pos)
+        self._inst = inst
+        if part == "draw":  # compás: el trazo empieza en la punta del lápiz
+            c = self.ctrl
+            tool = c.tool if c.tool in GUIDED_TOOLS else Tool.BRUSH
+            self._guided = True
+            self._start_stroke(tool, c.color.getRgb(), float(c.size_for(tool)), c.opacity_for(tool) / 100.0,
+                               inst.pencil(), None, t)
+        self.update(self._view_rect(inst.bounds(self.ctrl.touch_scale)))
+        return True
+
+    def _instrument_move(self, view: QPointF, t: int, modifiers) -> None:
+        inst, k = self._inst, self.ctrl.touch_scale
+        old = inst.bounds(k)
+        for q in inst.drag(self.to_canvas(view), modifiers):
+            if self._stroke is not None:
+                self._add_point(q, None, t)
+        self.update(self._view_rect(old.united(inst.bounds(k))))
+
+    def _paint_instruments(self, p: QPainter) -> None:
+        if not self.instruments:
+            return
+        p.save()
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setRenderHint(QPainter.RenderHint.TextAntialiasing)
+        if self.zoom_active:
+            p.scale(self._zoom, self._zoom)
+            p.translate(-self._zoom_tl.x(), -self._zoom_tl.y())
+        for inst in self.instruments.values():
+            inst.paint(p, self.ctrl.touch_scale)
+        p.restore()
+
     # ------------------------------------------------------------------ dibujo
 
     def _begin(self, pos: QPointF, pressure: float | None, t: int, eraser: bool = False,
@@ -954,8 +1057,17 @@ class Overlay(QWidget):
             self._render_text_preview()
             c.begin_text_edit(self)
             return
+        if tool in GUIDED_TOOLS:  # junto al borde de la regla o del transportador: el trazo lo sigue
+            self._guide = self.guide_at(pos, size)
+            if self._guide is not None:
+                self._guided = True
+                pos = self._guide(pos)
+        self._start_stroke(tool, rgba, size, opacity, pos, pressure, t)
+
+    def _start_stroke(self, tool: Tool, rgba, size: float, opacity: float, pos: QPointF,
+                      pressure: float | None, t: int) -> None:
         seed = random.getrandbits(31)
-        self._stroke = StrokeItem(tool, rgba, size, opacity, c.brush_type, seed)
+        self._stroke = StrokeItem(tool, rgba, size, opacity, self.ctrl.brush_type, seed)
         self._state = render.StrokeState(seed)
         self._last_pos = QPointF(pos)
         self._last_t = t
@@ -1054,6 +1166,8 @@ class Overlay(QWidget):
                 self._smooth = QPointF(self._smooth.x() + (pos.x() - self._smooth.x()) * k,
                                        self._smooth.y() + (pos.y() - self._smooth.y()) * k)
                 pos = self._smooth
+            if self._guide is not None:
+                pos = self._guide(pos)
             self._add_point(pos, pressure, t)
         elif self._shape is not None:
             sh = self._shape
@@ -1078,6 +1192,8 @@ class Overlay(QWidget):
             self._move(pos, pressure, t, modifiers)
         elif self._stroke is not None and self._stroke.tool == Tool.PEN:
             # El trazo termina exactamente donde se levantó la pluma.
+            if self._guide is not None:
+                pos = self._guide(pos)
             last = self._stroke.points[-1]
             if math.hypot(pos.x() - last[0], pos.y() - last[1]) >= 0.5:
                 self._add_point(pos, pressure, t, force=True)
@@ -1087,10 +1203,15 @@ class Overlay(QWidget):
 
     def finish_current(self) -> None:
         """Confirma el trazo, figura o texto en curso y lo añade al historial."""
+        if self._inst is not None:
+            self._inst.release()
+            self._inst = None
+            self.update()
+        guided, self._guided, self._guide = self._guided, False, None
         if self._stroke is not None:
             item = self._stroke
             self._stroke = None
-            if self.ctrl.recognize_shapes and item.tool in RECOGNIZABLE_TOOLS:
+            if self.ctrl.recognize_shapes and item.tool in RECOGNIZABLE_TOOLS and not guided:
                 shape = shape_recognition.recognize(item)
                 if shape is not None:  # «Formas perfectas»: el trazo se sustituye por la figura
                     old = QRectF(self._layer_rect)
@@ -1166,6 +1287,10 @@ class Overlay(QWidget):
             return
         editing_text = self._text is not None
         reopened = self._edit_uid is not None
+        if self._inst is not None:
+            self._inst.release()
+            self._inst = None
+        self._guide, self._guided = None, False
         self._stroke = None
         self._shape = None
         self._text = None
@@ -1184,7 +1309,7 @@ class Overlay(QWidget):
     @property
     def busy(self) -> bool:
         return (self._stroke is not None or self._shape is not None or self._text is not None
-                or self._cover_from is not None)
+                or self._cover_from is not None or self._inst is not None)
 
     # ------------------------------------------------------------------ selección
 
@@ -1507,6 +1632,8 @@ class Overlay(QWidget):
             self._crop_press(view)
         elif self._curtain_hit(view) and not self.busy:
             self._curtain_press(view)
+        elif not eraser and self._instrument_press(view, t):
+            pass
         elif self.ctrl.tool == Tool.LASER and self.ctrl.drawing and not eraser:
             self._laser_press(view)
         elif self._pan_from is None:
@@ -1517,6 +1644,8 @@ class Overlay(QWidget):
             self._crop_move(view)
         elif self._curtain_drag is not None:
             self._curtain_move(view)
+        elif self._inst is not None:
+            self._instrument_move(view, t, modifiers)
         elif self._laser is not None:
             self._laser_move(view)
         else:
@@ -1527,6 +1656,9 @@ class Overlay(QWidget):
             self._crop_release(view)
         elif self._curtain_drag is not None:
             self._curtain_drag = None
+        elif self._inst is not None:
+            self._instrument_move(view, t, modifiers)
+            self.finish_current()
         elif self._laser is not None:
             self._laser_release()
         else:
@@ -1565,7 +1697,7 @@ class Overlay(QWidget):
             self._clamp_zoom()
             self.update()
         elif (self.crop_active or self._curtain_drag is not None or self._laser is not None
-              or e.buttons() & Qt.MouseButton.LeftButton):
+              or self._inst is not None or e.buttons() & Qt.MouseButton.LeftButton):
             self._pointer_move(view, e.timestamp(), e.modifiers())
 
     def mouseReleaseEvent(self, e):  # noqa: N802
@@ -1603,6 +1735,8 @@ class Overlay(QWidget):
             self._tablet_active = True
             if self._curtain_hit(view) and not self.busy:
                 self._curtain_press(view)
+            elif not eraser and self._instrument_press(view, e.timestamp()):
+                pass
             elif laser and not eraser:
                 self._laser_press(view)
             else:
@@ -1611,6 +1745,8 @@ class Overlay(QWidget):
             if self._tablet_active:
                 if self._curtain_drag is not None:
                     self._curtain_move(view)
+                elif self._inst is not None:
+                    self._instrument_move(view, e.timestamp(), e.modifiers())
                 elif self._laser is not None:
                     self._laser_move(view)
                 else:
@@ -1619,6 +1755,9 @@ class Overlay(QWidget):
             if self._tablet_active:
                 if self._curtain_drag is not None:
                     self._curtain_drag = None
+                elif self._inst is not None:
+                    self._instrument_move(view, e.timestamp(), e.modifiers())
+                    self.finish_current()
                 elif self._laser is not None:
                     self._laser_release()
                 else:
@@ -1750,7 +1889,14 @@ class Overlay(QWidget):
             return
         step = 1 if d > 0 else -1
         mods = e.modifiers()
-        if mods & Qt.KeyboardModifier.AltModifier and self.ctrl.spotlight:
+        inst = self.instrument_at(e.position())
+        if inst is not None and not self.busy and mods in (Qt.KeyboardModifier.NoModifier,
+                                                           Qt.KeyboardModifier.ShiftModifier):
+            # Rueda sobre un instrumento: lo gira 1° (con Mayús, 15°)
+            old = inst[0].bounds(self.ctrl.touch_scale)
+            inst[0].rotate_by(-step * (15 if mods & Qt.KeyboardModifier.ShiftModifier else 1))
+            self.update(self._view_rect(old.united(inst[0].bounds(self.ctrl.touch_scale))))
+        elif mods & Qt.KeyboardModifier.AltModifier and self.ctrl.spotlight:
             self.ctrl.step_spotlight(step)
         elif mods & Qt.KeyboardModifier.ShiftModifier:
             self.ctrl.step_opacity(step)

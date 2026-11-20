@@ -128,6 +128,8 @@ CURTAIN_SIDES = {
     "left": "Desde la izquierda",
     "right": "Desde la derecha",
 }
+# Trazos que la regla y el transportador guían (y con los que dibuja el compás)
+GUIDED_TOOLS = (Tool.BRUSH, Tool.PENCIL, Tool.PEN, Tool.HIGHLIGHTER)
 # Trazos a mano alzada que pueden convertirse en figuras perfectas («Reconocer formas»)
 RECOGNIZABLE_TOOLS = (Tool.BRUSH, Tool.PENCIL, Tool.PEN)
 

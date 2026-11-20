@@ -695,6 +695,55 @@ def test_native_v15_crop_keys_curtain_and_cover(ctrl, qapp, tmp_path):
     assert _is_red(shot.getpixel((round((x0 + 100) * dpr), round(260 * dpr))))
 
 
+def test_native_instruments_ruler_and_compass(ctrl, qapp):
+    """Regla y compás con el ratón real: el trazo junto a la regla sale recto y el compás
+    dibuja un arco alrededor de la aguja. Se guardan capturas de cómo se ven."""
+    import math
+
+    from pizarra_virtual.items import StrokeItem
+    from pizarra_virtual.tools import Tool
+
+    ov = _overlay(ctrl)
+    dpr = ov.devicePixelRatioF()
+    ctrl.set_tool(Tool.BRUSH)
+    ctrl.set_background("white")
+    _settle(qapp)
+    left = max(ctrl.toolbar.geometry().right() + 40, 260)
+    ctrl.toggle_instrument("ruler")
+    ctrl.toggle_instrument("protractor")
+    ctrl.toggle_instrument("compass")
+    ruler = ov.instruments["ruler"]
+    ruler.x, ruler.y = left + ruler.length / 2, 140
+    pr = ov.instruments["protractor"]
+    pr.x, pr.y, pr.radius = left + 520, 480, 170
+    comp = ov.instruments["compass"]
+    comp.x, comp.y, comp.radius = left + 160, 470, 110
+    ov.update()
+    _settle(qapp, 200)
+
+    # Trazo tembloroso junto al borde inferior de la regla: queda recto
+    y = ruler.y + ruler.width / 2 + 10
+    _real_mouse(qapp, [(left + 40 + i * 12, y + (i % 3) * 5) for i in range(25)], dpr)
+    stroke = ctrl.history[-1][1]
+    assert isinstance(stroke, StrokeItem)
+    ys = [py for _x, py, _w in stroke.points]
+    assert max(ys) - min(ys) < 1.0, (min(ys), max(ys))
+
+    # Compás: se agarra la punta del lápiz y se gira 120°
+    q = comp.pencil()
+    pts = [(q.x(), q.y())]
+    for i in range(1, 25):
+        a = math.radians(i * 5)
+        pts.append((comp.x + 160 * math.cos(a), comp.y + 160 * math.sin(a)))
+    _real_mouse(qapp, pts, dpr)
+    arc = ctrl.history[-1][1]
+    assert isinstance(arc, StrokeItem) and arc is not stroke
+    for px, py, _w in arc.points:
+        assert abs(math.hypot(px - comp.x, py - comp.y) - 110) < 0.5
+    _grab("instrumentos.png")
+    ctrl.hide_instruments()
+
+
 def _touch_injection():
     """Inyección de toques REALES de Windows (InjectTouchInput), como una pantalla táctil."""
     import ctypes

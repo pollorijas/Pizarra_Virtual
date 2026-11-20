@@ -52,6 +52,7 @@ el **Manual de usuario** en PDF.
 | **Seleccionar y mover** | Tecla **A**: clic en un elemento o lazo para seleccionar; arrastrar para mover y la esquina para cambiar el tamaño. **Supr** elimina, **Ctrl+D** duplica, **Ctrl+A** selecciona todo. Lo borrado con la goma sigue borrado al mover. |
 | **Pegar** | **Ctrl+V** o botón: pega una imagen (o archivo de imagen) centrada en el cursor, lista para moverla o agrandarla; un texto copiado se pega como texto. Se guarda en la sesión y sale en el PDF. |
 | **Notas adhesivas** | Tecla **O** o botón de la nota: un clic pega una nota de papel de color (amarilla, rosada, celeste, verde, naranja o blanca) donde se escribe como con Texto; crece con lo escrito. Clic sobre ella para editarla; se mueve, se duplica y se guarda en la sesión y el PDF. |
+| **Regla, transportador y compás** | Teclas **I**, **Y** y **Mayús+C** o el botón de la regla. Se mueven arrastrándolos y giran con su botón azul o la rueda. Un trazo que empieza junto a la **regla** sale recto; el **transportador** mide ángulos con su aguja y guía arcos y rectas; el **compás** se abre con la pata del lápiz (radio en cm) y dibuja arcos o circunferencias al girar la punta. No forman parte del dibujo. |
 | **Recortar zona** | Tecla **X**, **Ctrl+Alt+R** o el menú de la cámara: la pantalla se congela y se arrastra un rectángulo. Se guarda solo esa parte (con o sin lo dibujado) y se copia al portapapeles, o se **pega en la pizarra** como imagen en el mismo lugar. |
 | **Temporizador** | Botón con menú: cuenta regresiva (1 a 30 min u otro tiempo) o cronómetro, en una ventanita siempre encima con pausa, ±1 minuto y aviso «¡Tiempo!» en rojo al terminar. |
 | **Color y grosor** | Botón de color con selector completo + paleta de 12 colores; deslizadores de **grosor** y **opacidad** (cada herramienta recuerda su propio tamaño y opacidad). También con la **rueda del ratón** sobre la pizarra. |
@@ -412,6 +413,7 @@ Pizarra_Virtual/
 │   ├── shape_recognition.py      # «Formas perfectas»: reconocimiento de formas dibujadas a mano
 │   ├── timer.py                  # Temporizador / cronómetro en pantalla
 │   ├── keyview.py                # «Mostrar teclas pulsadas» (solo atajos, nunca el texto)
+│   ├── instruments.py            # Regla, transportador y compás
 │   ├── session.py                # Páginas, sesiones .pizarra y exportación a PDF
 │   ├── toolbar.py                # Barra de herramientas flotante
 │   ├── hotkeys.py                # Atajos globales (RegisterHotKey)

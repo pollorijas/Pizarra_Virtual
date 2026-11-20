@@ -19,7 +19,7 @@ varias páginas, guardado de la clase y exportación a PDF.</p>
 <li>Instalación y primer uso</li>
 <li>Modos de trabajo: «Dibujando» y «Ratón libre»</li>
 <li>La barra de herramientas</li>
-<li>Herramientas de dibujo</li>
+<li>Herramientas de dibujo (con regla, transportador y compás)</li>
 <li>Texto</li>
 <li>Color, grosor y opacidad</li>
 <li>Fondos y pautas</li>
@@ -82,17 +82,18 @@ pasa a «Ratón libre» (o sale del zoom si está activo).</p>
 <li><b>Dibujando / Ratón libre</b>: cambia de modo.</li>
 <li><b>Herramientas</b>: pincel, lápiz, pluma, destacador, goma, texto, láser, rectángulo, elipse,
 triángulo, línea y flecha. Debajo, <b>Más figuras</b>, <b>Sellos</b> y <b>Plantillas</b> (botones
-con menú) y <b>Seleccionar</b>, <b>Pegar</b> y <b>Notas adhesivas</b>.</li>
+con menú), <b>Seleccionar</b>, <b>Notas adhesivas</b> e <b>Instrumentos de geometría</b> (regla,
+transportador y compás).</li>
 <li><b>Opciones de la herramienta</b>: tipo de pincel, <b>Formas perfectas</b>, relleno de figuras o
 negrita (según la herramienta).</li>
 <li><b>Color</b>: el botón grande abre el selector de color; debajo, 12 colores rápidos.</li>
 <li><b>Grosor</b> (o tamaño de letra) y <b>opacidad</b>.</li>
-<li><b>Fondo</b> y <b>pauta</b> de la página.</li>
+<li><b>Fondo</b> y <b>pauta</b> de la página (los dos desplegables).</li>
 <li><b>Presentación</b>: foco, cortina, tapar zona · resaltar cursor, mostrar teclas y
 temporizador.</li>
 <li><b>Páginas</b>: anterior, siguiente y página nueva.</li>
-<li><b>Acciones</b>: deshacer, rehacer, borrar · zoom, captura de pantalla y recortar zona, sesión
-(abrir, guardar, PDF) · ocultar, ayuda y manual, salir.</li>
+<li><b>Acciones</b>: deshacer, rehacer, borrar · zoom, captura de pantalla y recortar zona, pegar ·
+sesión (abrir, guardar, PDF), ocultar, ayuda y manual · salir.</li>
 </ul>
 <p>Si la pantalla no es lo bastante alta (por ejemplo, un portátil de 1366×768 con escalado del
 125–150 %), la barra se coloca automáticamente en <b>dos columnas</b> para que quepa entera.</p>
@@ -243,6 +244,34 @@ eligen en la barra.</li>
 <li>Un <b>clic sobre una nota</b> (en cualquier parte del papel) la abre para cambiar su texto.
 Con <b>Seleccionar</b> se mueve, se agranda o se duplica.</li>
 <li>Una nota que se deja vacía no se pega. Las notas se guardan en la sesión y salen en el PDF.</li>
+</ul>
+
+<h3>Regla, transportador y compás · I · Y · Mayús+C</h3>
+<p><img src="instrumentos.png" width="560"></p>
+<p>El botón de los <b>instrumentos de geometría</b> (la regla) muestra u oculta cada instrumento en
+la pantalla donde está el cursor; también con las teclas <b>I</b> (regla), <b>Y</b> (transportador) y
+<b>Mayús+C</b> (compás). Se pueden usar los tres a la vez. Son una ayuda para dibujar: no forman parte
+del dibujo, no se borran con «Borrar todo», no se guardan en la sesión ni salen en el PDF.</p>
+<ul>
+<li><b>Mover</b>: arrastra el instrumento por su cuerpo. <b>Girar</b>: arrastra el botón azul con la
+flecha circular (los ángulos de 15°, 30°, 45°… «atraen»; con <b>Mayús</b> el giro es libre), o usa la
+<b>rueda del ratón</b> encima del instrumento (1° cada paso; con Mayús, 15°). <b>Quitar</b>: el botón
+rojo ✕.</li>
+<li><b>Regla</b>: tiene escala en centímetros reales de la pantalla (y milímetros si caben). Un trazo
+con el pincel, el lápiz, la pluma o el destacador que <b>empieza junto a uno de sus bordes largos</b>
+sale <b>recto</b>, pegado al borde por fuera, como al pasar el lápiz contra una regla de verdad. Al
+girarla, una etiqueta muestra su inclinación.</li>
+<li><b>Transportador</b>: el centro de la base (la cruz azul) es el vértice. La <b>aguja</b> azul se
+arrastra por su punta y el número grande indica el ángulo medido (de 0° a 180°). Gira alrededor del
+vértice, y el botón con dos flechas cambia su tamaño. Un trazo que empieza junto al arco sigue el
+arco; uno que empieza junto a la base sale recto.</li>
+<li><b>Compás</b>: la aguja queda fija. Arrastra la <b>pata amarilla</b> (la del lápiz) para abrirlo o
+cerrarlo: la etiqueta indica el radio en centímetros. Arrastra la <b>punta del lápiz</b> (el círculo
+azul) alrededor de la aguja para <b>dibujar</b> un arco o una circunferencia completa (como máximo
+una vuelta) con el color y el grosor de la herramienta actual (pincel si la herramienta no dibuja).
+La bisagra o la pata de la aguja lo <b>mueven</b>.</li>
+<li>Lo que se dibuja con la regla, el transportador o el compás es un trazo normal: se deshace con
+Ctrl+Z, se borra con la goma y no se convierte con «Formas perfectas».</li>
 </ul>
 
 <h2>5. Texto</h2>
@@ -500,6 +529,7 @@ Rectángulo redondeado</td></tr>
 <tr><td>A</td><td>Seleccionar y mover</td></tr>
 <tr><td>G</td><td>Formas perfectas sí / no</td></tr>
 <tr><td>Ctrl+V</td><td>Pegar una imagen o un texto</td></tr>
+<tr><td>I · Y · Mayús+C</td><td>Regla · Transportador · Compás (otra vez: quitarlo)</td></tr>
 <tr><td>O · H · X</td><td>Nota adhesiva · Tapar zona (clic sobre ella: descubrir) · Recortar zona</td></tr>
 <tr><td>Ctrl+A · Ctrl+D · Supr · Esc</td><td>Con Seleccionar: todo · duplicar · eliminar · quitar la
 selección</td></tr>

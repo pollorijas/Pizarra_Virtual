@@ -1,6 +1,7 @@
 """Iconos vectoriales dibujados con QPainter (sin archivos externos, nítidos en cualquier DPI)."""
 from __future__ import annotations
 
+import math
 from functools import lru_cache
 
 from PySide6.QtCore import QPointF, QRectF, Qt
@@ -524,6 +525,48 @@ def _keys(p, c):
     p.drawLine(QPointF(19, 3.5), QPointF(18, 5))
 
 
+def _ruler(p, c):
+    """Regla inclinada con sus marcas."""
+    p.translate(12, 12)
+    p.rotate(-35)
+    p.setPen(_pen(c, 1.5))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawRoundedRect(QRectF(-11, -4, 22, 8), 1.5, 1.5)
+    p.setPen(_pen(c, 1.2))
+    for i, x in enumerate(range(-8, 10, 3)):
+        p.drawLine(QPointF(x, -4), QPointF(x, -1 if i % 2 else 0.5))
+
+
+def _protractor(p, c):
+    """Transportador: semicírculo con marcas y la aguja."""
+    p.setPen(_pen(c, 1.5))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    path = QPainterPath(QPointF(22, 18))
+    path.arcTo(QRectF(2, 8, 20, 20), 0, 180)
+    path.closeSubpath()
+    p.drawPath(path)
+    p.setPen(_pen(c, 1.1))
+    for deg in range(30, 180, 30):
+        a = math.radians(deg)
+        p.drawLine(QPointF(12 + 10 * math.cos(a), 18 - 10 * math.sin(a)),
+                   QPointF(12 + 7.5 * math.cos(a), 18 - 7.5 * math.sin(a)))
+    p.setPen(_pen(QColor(79, 156, 249), 1.6))
+    p.drawLine(QPointF(12, 18), QPointF(12 + 9 * math.cos(1.0), 18 - 9 * math.sin(1.0)))
+
+
+def _compass(p, c):
+    """Compás abierto sobre un arco."""
+    p.setPen(_pen(QColor(79, 156, 249), 1.3))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawArc(QRectF(-6, 2, 36, 36), 45 * 16, 90 * 16)
+    p.setPen(_pen(c, 1.8))
+    p.drawLine(QPointF(12, 5), QPointF(5.5, 20))
+    p.drawLine(QPointF(12, 5), QPointF(18.5, 20))
+    p.setBrush(c)
+    p.drawEllipse(QPointF(12, 5), 1.8, 1.8)
+    p.drawLine(QPointF(12, 5), QPointF(12, 2))
+
+
 def _touch(p, c):
     """Modo táctil: mano con el índice extendido y ondas del toque."""
     p.setPen(_pen(QColor(80, 140, 230), 1.3))
@@ -560,6 +603,7 @@ _ICONS = {
     "shapes_more": _shapes_more, "stamp": _stamp, "templates": _templates,
     "select": _select, "timer": _timer, "paste": _paste, "shapes_magic": _shapes_magic,
     "note": _note, "cover": _cover, "crop": _crop, "keys": _keys, "touch": _touch,
+    "ruler": _ruler, "protractor": _protractor, "compass": _compass,
 }
 for _name in ("pentagon", "hexagon", "octagon", "diamond", "star", "rounded_rect", "axes", "double_arrow",
               "curved_arrow", "brace"):

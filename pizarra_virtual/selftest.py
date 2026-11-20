@@ -14,7 +14,7 @@ log = logging.getLogger(__name__)
 
 def render_all_tools():
     """Devuelve {nombre: píxeles pintados} para cada herramienta y tipo de pincel."""
-    from PySide6.QtCore import Qt
+    from PySide6.QtCore import QPointF, Qt
     from PySide6.QtGui import QImage, QPainter
 
     from . import render
@@ -134,6 +134,26 @@ def render_all_tools():
     watcher = KeyWatcher()
     watcher.update({0x11})
     results["keys:ctrl+c"] = int(watcher.update({0x11, 0x43}) == ["Ctrl + C"])
+
+    # Instrumentos de geometría: se dibujan, la regla guía un trazo y el compás dibuja un arco
+    from . import instruments as inst_mod
+
+    for kind in inst_mod.INSTRUMENTS:
+        inst = inst_mod.create(kind, QPointF(100, 100), 200, 200, inst_mod.DEFAULT_PPCM)
+        img = blank()
+        p = QPainter(img)
+        inst.paint(p, 1.0)
+        p.end()
+        results["instrument:" + kind] = painted(img)
+    ruler = inst_mod.Ruler(100, 100, inst_mod.DEFAULT_PPCM, 5)
+    follow = ruler.guide(QPointF(100, 100 + ruler.width / 2 + 5), 1.0, 4.0)
+    results["instrument:guide"] = int(follow is not None
+                                      and abs(follow(QPointF(120, 170)).y() - (100 + ruler.width / 2 + 2)) < 0.01)
+    compass = inst_mod.Compass(100, 100, 50)
+    compass.press("draw", compass.pencil())
+    arc = compass.drag(QPointF(100, 150))
+    results["instrument:arc"] = int(len(arc) > 10 and all(abs(math.hypot(q.x() - 100, q.y() - 100) - 50) < 0.01
+                                                              for q in arc))
 
     # La goma debe borrar lo pintado
     img = blank()
