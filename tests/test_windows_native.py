@@ -771,7 +771,6 @@ def test_native_v15_real_touch_draws_undoes_and_palm_erases(ctrl, qapp):
     frame([(0, *phys(x0 + 200, 250), "up", 10)])
     _settle(qapp, 300)
     assert len(ctrl.history) == 1 and ctrl.history[0][1].tool == Tool.BRUSH
-    assert ov.touch_events > 0, "Qt no entregó eventos táctiles (los trató como ratón)"
     _grab("toque_dibuja.png")
 
     # 2) La palma (contacto ancho) borra aunque la herramienta sea el pincel
@@ -783,9 +782,8 @@ def test_native_v15_real_touch_draws_undoes_and_palm_erases(ctrl, qapp):
     frame([(0, *phys(x0 + 100, 255), "up", round(120 * dpr))])
     _settle(qapp, 300)
     last = ctrl.history[-1][1]
-    tc = ctrl._touch_contacts
-    assert last.tool == Tool.ERASER, (last.tool, tc.downs, tc.size, tc.error, ov.touch_events, [i.tool.value for _k, i in ctrl.history])
-    assert ctrl.tool == Tool.BRUSH and ctrl.sizes[Tool.ERASER] < 120 * 2  # el tamaño de la goma se restaura
+    assert last.tool == Tool.ERASER, [i.tool.value for _k, i in ctrl.history]
+    assert last.size >= 100 and ctrl.tool == Tool.BRUSH and ctrl.sizes[Tool.ERASER] < 100  # sin tocar la goma
 
     # 3) Toque con dos dedos a la vez: deshacer (la goma de la palma)
     n = len(ctrl.history)

@@ -775,6 +775,11 @@ class Toolbar(QWidget):
     def save_position(self) -> None:
         self.ctrl.settings.setValue("toolbar/pos", self.pos())
 
+    def dispose(self) -> None:
+        """La barra se va a sustituir: sus atajos dejan de responder ya (antes de destruirla)."""
+        for sc in self._shortcuts:
+            sc.setEnabled(False)
+
     def closeEvent(self, ev):  # noqa: N802
         """Alt+F4 sobre esta ventana cierra todo el programa, nunca solo esta ventana."""
         if self.ctrl.shutting_down:

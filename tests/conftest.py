@@ -55,3 +55,12 @@ def _clean_clipboard(qapp):
     from PySide6.QtGui import QGuiApplication
 
     QGuiApplication.clipboard().clear()
+
+
+@pytest.fixture
+def touch(qapp):
+    """Pantalla táctil de prueba (para QTest.touchEvent)."""
+    from PySide6.QtGui import QInputDevice
+    from PySide6.QtTest import QTest
+
+    return QTest.createTouchDevice(QInputDevice.DeviceType.TouchScreen)

@@ -4,7 +4,7 @@ import math
 
 import pytest
 from PySide6.QtCore import QEvent, QPoint, QPointF, QRectF, Qt
-from PySide6.QtGui import QColor, QCursor, QGuiApplication, QImage, QInputDevice, QKeyEvent, QPainter
+from PySide6.QtGui import QColor, QCursor, QGuiApplication, QImage, QKeyEvent, QPainter
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
@@ -488,11 +488,6 @@ def test_shown_keys_fade_out(ctrl, monkeypatch):
 
 
 # ====================================================================== pantalla táctil
-
-
-@pytest.fixture
-def touch():
-    return QTest.createTouchDevice(QInputDevice.DeviceType.TouchScreen)
 
 
 def _seq(ov, touch):

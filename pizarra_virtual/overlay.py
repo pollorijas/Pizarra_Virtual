@@ -174,9 +174,7 @@ class Overlay(QWidget):
         self._tablet_active = False
         self._touch_active = False  # gesto táctil en curso (el ratón simulado se ignora)
         self._touch: dict | None = None
-        self.touch_events = 0  # eventos táctiles recibidos (diagnóstico)
         self._last_touch_ms = -1e9
-        self.touch_sizes: list = []  # tamaños de contacto vistos (diagnóstico)
         self._last_pos = QPointF()
         self._last_t = 0
         # Estado de la pluma
@@ -293,8 +291,6 @@ class Overlay(QWidget):
         if passthrough:
             self.finish_current()
             self.end_zoom()
-            if self.crop_active:  # en «Ratón libre» no puede quedar la pantalla congelada encima
-                self.ctrl.abort_crop()
         self.ctrl.refresh_cursor(self)
         self.update()
 
@@ -897,7 +893,9 @@ class Overlay(QWidget):
 
     # ------------------------------------------------------------------ dibujo
 
-    def _begin(self, pos: QPointF, pressure: float | None, t: int, eraser: bool = False) -> None:
+    def _begin(self, pos: QPointF, pressure: float | None, t: int, eraser: bool = False,
+               eraser_size: float | None = None) -> None:
+        """Empieza un trazo, figura, texto… ``eraser_size`` (palma) fija el tamaño de esa goma."""
         if not self.ctrl.drawing:
             return
         if not eraser and self.ctrl.tool == Tool.SELECT:
@@ -915,7 +913,7 @@ class Overlay(QWidget):
         self.finish_current()
         c = self.ctrl
         tool = Tool.ERASER if eraser else c.tool
-        size = float(c.size_for(tool))
+        size = float(eraser_size if eraser and eraser_size is not None else c.size_for(tool))
         opacity = c.opacity_for(tool) / 100.0
         rgba = c.color.getRgb()
         if tool == Tool.STAMP:
@@ -1503,7 +1501,8 @@ class Overlay(QWidget):
 
     # Pulsar / arrastrar / soltar con el botón izquierdo, el dedo o el lápiz (sin presión)
 
-    def _pointer_press(self, view: QPointF, t: int, eraser: bool = False) -> None:
+    def _pointer_press(self, view: QPointF, t: int, eraser: bool = False,
+                       eraser_size: float | None = None) -> None:
         if self.crop_active:
             self._crop_press(view)
         elif self._curtain_hit(view) and not self.busy:
@@ -1511,7 +1510,7 @@ class Overlay(QWidget):
         elif self.ctrl.tool == Tool.LASER and self.ctrl.drawing and not eraser:
             self._laser_press(view)
         elif self._pan_from is None:
-            self._begin(self.to_canvas(view), None, t, eraser=eraser)
+            self._begin(self.to_canvas(view), None, t, eraser=eraser, eraser_size=eraser_size)
 
     def _pointer_move(self, view: QPointF, t: int, modifiers) -> None:
         if self.crop_active:
@@ -1648,7 +1647,6 @@ class Overlay(QWidget):
         self.update()
 
     def _touch_event(self, ev) -> None:
-        self.touch_events += 1
         self._last_touch_ms = now_ms()
         t = ev.type()
         now = ev.timestamp()
@@ -1656,15 +1654,13 @@ class Overlay(QWidget):
         if t == QEvent.Type.TouchCancel:
             if g is not None and g["mode"] == "one":
                 self._abort_for_gesture()
-            if g is not None:
-                self._restore_palm(g)
             self._touch = None
             self._touch_active = False
             ev.accept()
             return
         if t == QEvent.Type.TouchBegin or g is None:
             g = self._touch = {"mode": "one", "t0": now, "start": {}, "cur": {}, "primary": None,
-                               "fingers": 0, "moved": 0.0, "zoom0": None}
+                               "fingers": 0, "moved": 0.0, "zoom0": None, "palm": False}
             self._touch_active = True
         for pt in ev.points():
             if pt.state() == QEventPoint.State.Stationary:
@@ -1685,14 +1681,11 @@ class Overlay(QWidget):
                 pt = ev.points()[0]
                 g["primary"] = pt.id()
                 size = self._contact_size(pt)
-                palm = size >= PALM_SIZE
-                if palm:
-                    self._palm_eraser(g, size)
-                self._pointer_press(QPointF(pt.position()), now, eraser=palm)
+                g["palm"] = palm = size >= PALM_SIZE
+                self._pointer_press(QPointF(pt.position()), now, eraser=palm, eraser_size=self._palm_size(size))
             elif len(ev.points()) >= 2 and g["primary"] is not None:
                 if now - g["t0"] <= TOUCH_MULTI_MS and g["moved"] < TOUCH_SLOP:
                     self._abort_for_gesture()
-                    self._restore_palm(g)  # (la goma de la palma se descartó: era un gesto)
                     g["mode"] = "multi"
                 # (si llega tarde, el segundo dedo se ignora y se sigue dibujando con el primero)
             elif len(ev.points()) >= 2:  # varios dedos a la vez desde el principio
@@ -1702,15 +1695,15 @@ class Overlay(QWidget):
                 if prim is not None and prim.state() == QEventPoint.State.Released:
                     self._pointer_release(QPointF(prim.position()), now, mods)
                     g["primary"] = -1  # ya soltado
-                    self._restore_palm(g)
                 elif prim is not None and prim.state() == QEventPoint.State.Updated:
-                    size = self._contact_size(prim)
-                    if "palm_size" not in g and size >= PALM_SIZE and now - g["t0"] <= PALM_LATE_MS:
-                        # Windows a veces informa el tamaño del contacto un instante después de
-                        # empezar: lo dibujado hasta ahora se descarta y se borra desde el inicio.
+                    # Windows a veces informa el tamaño del contacto un instante después de empezar:
+                    # lo dibujado hasta ahora se descarta y se borra desde el inicio.
+                    size = self._contact_size(prim) if not g["palm"] and now - g["t0"] <= PALM_LATE_MS else 0.0
+                    if size >= PALM_SIZE:
+                        g["palm"] = True
                         self._abort_for_gesture()
-                        self._palm_eraser(g, size)
-                        self._pointer_press(g["start"].get(g["primary"], QPointF(prim.position())), now, eraser=True)
+                        self._pointer_press(g["start"].get(g["primary"], QPointF(prim.position())), now,
+                                            eraser=True, eraser_size=self._palm_size(size))
                     self._pointer_move(QPointF(prim.position()), now, mods)
         if g["mode"] == "multi" and self.zoom_active and len(down) >= 2:
             self._touch_pinch(g, down)
@@ -1723,27 +1716,18 @@ class Overlay(QWidget):
                     self.ctrl.redo()  # toque con tres dedos: rehacer
             elif g["mode"] == "one" and g["primary"] not in (None, -1):
                 self._pointer_release(g["cur"].get(g["primary"], QPointF()), now, mods)
-            self._restore_palm(g)  # la goma vuelve siempre a su tamaño al terminar
             self._touch = None
             self._touch_active = False
         ev.accept()
 
     def _contact_size(self, pt) -> float:
         """Ancho del contacto (px lógicos): el que da Qt o, en Windows, el que informa el sistema."""
-        size = max(pt.ellipseDiameters().width(), pt.ellipseDiameters().height(),
-                   self.ctrl.touch_contact_size() / (self.devicePixelRatioF() or 1.0))
-        self.touch_sizes.append((round(size), pt.state().name))  # diagnóstico
-        del self.touch_sizes[:-40]
-        return size
+        d = pt.ellipseDiameters()
+        return max(d.width(), d.height(), self.ctrl.touch_contact_size() / (self.devicePixelRatioF() or 1.0))
 
-    def _palm_eraser(self, g: dict, size: float) -> None:
-        """La palma borra, con una goma del tamaño del contacto (se restaura al levantarla)."""
-        g["palm_size"] = self.ctrl.sizes[Tool.ERASER]
-        self.ctrl.sizes[Tool.ERASER] = int(min(250, max(size, self.ctrl.sizes[Tool.ERASER])))
-
-    def _restore_palm(self, g: dict) -> None:
-        if "palm_size" in g:
-            self.ctrl.sizes[Tool.ERASER] = g.pop("palm_size")
+    def _palm_size(self, size: float) -> float:
+        """Goma de la palma: del tamaño del contacto (sin cambiar el tamaño elegido para la goma)."""
+        return min(250.0, max(size, float(self.ctrl.size_for(Tool.ERASER))))
 
     def _touch_pinch(self, g: dict, down) -> None:
         """Con el zoom activo, dos dedos acercan/alejan (pellizcar) y desplazan la vista."""

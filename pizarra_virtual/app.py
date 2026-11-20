@@ -547,6 +547,8 @@ class Controller(QObject):
 
     def set_drawing(self, on: bool) -> None:
         on = bool(on)
+        if not on and self.crop_active:  # en «Ratón libre» no puede quedar la pantalla congelada
+            self.abort_crop()
         if on and not self.visible:
             self._set_visible(True)
         self.drawing = on
@@ -739,9 +741,7 @@ class Controller(QObject):
         old = self.toolbar
         visible = old.isVisible()
         old.save_position()
-        for sc in old._shortcuts:  # sus atajos dejan de responder ya, no cuando se destruya
-            sc.setEnabled(False)
-        self.state_changed.disconnect(old.sync)
+        old.dispose()  # sus atajos dejan de responder ya, no cuando se destruya        self.state_changed.disconnect(old.sync)
         old.hide()
         old.deleteLater()  # (sin close(): cerrar la barra cerraría el programa)
         self.toolbar = Toolbar(self)

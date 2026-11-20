@@ -1,22 +1,14 @@
 """Pruebas de la versión 1.5.1: correcciones de la revisión de código."""
 from PySide6.QtCore import QEvent, QPoint
-from PySide6.QtGui import QGuiApplication, QInputDevice, QTouchEvent
+from PySide6.QtGui import QTouchEvent
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from pizarra_virtual import capture, touchcontact, winutil
 from pizarra_virtual.tools import Tool
-from tests.test_v15 import _fake_screen, _start_crop
+from tests.test_v15 import ALT, CTRL, _fake_screen, _ov, _seq, _start_crop
 
-CTRL, ALT, K = 0x11, 0x12, 0x4B
-
-
-def _ov(ctrl):
-    return ctrl.overlay_for_screen(QGuiApplication.primaryScreen())
-
-
-def _seq(ov, dev):
-    return QTest.touchEvent(ov, dev)
+K = 0x4B
 
 
 def test_touch_screen_detection_ignores_pen_only_digitizers():
@@ -27,34 +19,34 @@ def test_touch_screen_detection_ignores_pen_only_digitizers():
     assert winutil.digitizer_has_touch(0xC7)
 
 
-def test_palm_eraser_size_is_restored_when_palm_becomes_a_gesture(ctrl):
+def test_palm_never_changes_the_chosen_eraser_size(ctrl, touch):
     ov = _ov(ctrl)
-    dev = QTest.createTouchDevice(QInputDevice.DeviceType.TouchScreen)
+    dev = touch
     ctrl.set_tool(Tool.BRUSH)
     base = ctrl.sizes[Tool.ERASER]
     ctrl.touch_contact_size = lambda: 120.0 * ov.devicePixelRatioF()
     _seq(ov, dev).press(0, QPoint(300, 300), ov).commit()
-    assert ctrl.sizes[Tool.ERASER] >= 100  # la palma usa una goma grande…
-    _seq(ov, dev).stationary(0).press(1, QPoint(380, 300), ov).commit()  # …pero era un gesto
+    assert ov._stroke is not None and ov._stroke.size >= 100  # la palma usa una goma grande…
+    assert ctrl.sizes[Tool.ERASER] == base  # …sin tocar el tamaño elegido para la goma
+    _seq(ov, dev).stationary(0).press(1, QPoint(380, 300), ov).commit()  # era un gesto
     _seq(ov, dev).release(0, QPoint(300, 300), ov).release(1, QPoint(380, 300), ov).commit()
     assert ctrl.sizes[Tool.ERASER] == base
     # También si Windows cancela el toque
     _seq(ov, dev).press(0, QPoint(300, 300), ov).commit()
-    assert ctrl.sizes[Tool.ERASER] >= 100
     QApplication.sendEvent(ov, QTouchEvent(QEvent.Type.TouchCancel, dev))
     assert ctrl.sizes[Tool.ERASER] == base and not ov._touch_active
 
 
 def test_contact_size_is_only_trusted_with_a_single_contact():
     tc = touchcontact.TouchContacts()
-    tc.down(1, 10.0)
+    tc.set(1, 10.0)
     assert tc.recent_size() == 10.0
-    tc.down(2, 120.0)  # la mano se apoya mientras el dedo escribe
+    tc.set(2, 120.0)  # la mano se apoya mientras el dedo escribe
     assert tc.recent_size() == 0.0  # no se sabe de quién es: no se convierte en goma
     tc.up(1)
     assert tc.recent_size() == 120.0
-    tc.update(2, 130.0)
-    assert tc.recent_size() == 130.0 and tc.size == 130.0
+    tc.set(2, 130.0)
+    assert tc.recent_size() == 130.0
     tc.up(2)
     assert tc.recent_size() == 0.0
 

@@ -44,7 +44,7 @@ if IS_WINDOWS:
                     ("pressure", ctypes.c_uint32)]
 
     _user32 = ctypes.windll.user32
-    _user32.GetPointerType.argtypes = [ctypes.c_uint32, ctypes.POINTER(ctypes.c_uint32)]
+    _user32.GetPointerType.argtypes = [ctypes.c_uint32, ctypes.POINTER(ctypes.c_uint32)]  # (_prune)
     _user32.GetPointerTouchInfo.argtypes = [ctypes.c_uint32, ctypes.POINTER(_POINTER_TOUCH_INFO)]
 
 
@@ -55,22 +55,10 @@ class TouchContacts(QAbstractNativeEventFilter):
         super().__init__()
         self.sizes: dict[int, float] = {}  # pid -> ancho del contacto (píxeles físicos)
         self.when = 0.0  # cuándo cambió por última vez
-        self.downs = 0  # toques vistos (diagnóstico)
-        self.error = ""
 
-    @property
-    def size(self) -> float:
-        return max(self.sizes.values(), default=0.0)
-
-    def down(self, pid: int, size: float) -> None:
-        self.downs += pid not in self.sizes
+    def set(self, pid: int, size: float) -> None:
         self.sizes[pid] = size
         self.when = time.monotonic()
-
-    def update(self, pid: int, size: float) -> None:
-        if pid in self.sizes:
-            self.sizes[pid] = size
-            self.when = time.monotonic()
 
     def up(self, pid: int) -> None:
         self.sizes.pop(pid, None)
@@ -92,29 +80,25 @@ class TouchContacts(QAbstractNativeEventFilter):
     def nativeEventFilter(self, event_type, message):  # noqa: N802 (API de Qt)
         try:
             et = bytes(event_type.data()) if hasattr(event_type, "data") else bytes(event_type)
-            if et == b"windows_generic_MSG":
-                msg = wintypes.MSG.from_address(int(message))
-                if msg.message in (WM_POINTERDOWN, WM_POINTERUPDATE, WM_POINTERUP):
-                    pid = int(msg.wParam) & 0xFFFF
-                    if msg.message == WM_POINTERUP:
-                        self.up(pid)
-                        return False, 0
-                    kind = ctypes.c_uint32()
-                    if not (_user32.GetPointerType(pid, ctypes.byref(kind)) and kind.value == PT_TOUCH):
-                        return False, 0
-                    info = _POINTER_TOUCH_INFO()
-                    size = 0.0
-                    if _user32.GetPointerTouchInfo(pid, ctypes.byref(info)) \
-                            and info.touchMask & TOUCH_MASK_CONTACTAREA:
-                        r = info.rcContact
-                        size = float(max(r.right - r.left, r.bottom - r.top))
-                    else:
-                        self.error = f"GetPointerTouchInfo: {ctypes.GetLastError()} mask={info.touchMask}"
-                    if msg.message == WM_POINTERDOWN:
+            if et != b"windows_generic_MSG":
+                return False, 0
+            msg = wintypes.MSG.from_address(int(message))
+            m = msg.message
+            if m not in (WM_POINTERDOWN, WM_POINTERUPDATE, WM_POINTERUP):
+                return False, 0
+            pid = int(msg.wParam) & 0xFFFF
+            if m == WM_POINTERUP:
+                self.up(pid)
+            elif m == WM_POINTERDOWN or pid in self.sizes:  # (ratón y lápiz: no se siguen)
+                info = _POINTER_TOUCH_INFO()  # solo lo rellena si el puntero es un toque
+                if _user32.GetPointerTouchInfo(pid, ctypes.byref(info)) \
+                        and info.pointerInfo.pointerType == PT_TOUCH:
+                    r = info.rcContact
+                    size = float(max(r.right - r.left, r.bottom - r.top)) \
+                        if info.touchMask & TOUCH_MASK_CONTACTAREA else 0.0
+                    if m == WM_POINTERDOWN and self.sizes:
                         self._prune()
-                        self.down(pid, size)
-                    else:
-                        self.update(pid, size)
+                    self.set(pid, size)
         except Exception:  # pragma: no cover
             log.exception("Error leyendo el contacto táctil")
         return False, 0
