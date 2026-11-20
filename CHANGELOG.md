@@ -24,8 +24,9 @@ detiene si falta.
     circunferencias completas al girar la punta del lápiz, con el color y el grosor actuales.
 
 ### Cambiado
-- La barra hace sitio al nuevo botón: **Pegar** pasa al grupo de acciones (junto a la captura) y el
-  desplegable del fondo ya no lleva el rótulo «Fondo» (lo explica su descripción emergente).
+- La barra hace sitio al nuevo botón: **Pegar** pasa al grupo de acciones (junto a la captura),
+  **Salir** pasa a la cabecera (junto a plegar) y el desplegable del fondo ya no lleva el rótulo
+  «Fondo» (lo explica su descripción emergente).
 - La barra mide su altura con las opciones de la herramienta que más ocupa (el pincel), no con
   todas a la vez, para decidir si va en una o dos columnas.
 - Simplificación interna del borrado con la palma, de la cancelación del recorte y de la lectura del

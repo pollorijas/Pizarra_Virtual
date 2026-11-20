@@ -257,6 +257,11 @@ class Toolbar(QWidget):
         self.collapse_btn.setIconSize(QSize(int(16 * self.k), int(16 * self.k)))
         self.collapse_btn.clicked.connect(self.toggle_collapsed)
         hl.addWidget(self.collapse_btn)
+        self.quit_btn = self._tool_button("power", "Salir de Pizarra Virtual")
+        self.quit_btn.setFixedSize(small, small)
+        self.quit_btn.setIconSize(QSize(int(16 * self.k), int(16 * self.k)))
+        self.quit_btn.clicked.connect(self.ctrl.quit)
+        hl.addWidget(self.quit_btn)
         lay.addWidget(header)
 
         # Cuerpo en dos bloques. En pantallas bajas (p. ej. 1366x768 al 150 %) la barra no
@@ -526,11 +531,8 @@ class Toolbar(QWidget):
         help_menu.addAction(icons.icon("help"), "Atajos de teclado\tF1", self.ctrl.show_help)
         help_menu.addAction(icons.icon("pdf"), "Manual de usuario (PDF)", self.ctrl.open_manual)
         help_btn.setMenu(help_menu)
-        quit_btn = self._tool_button("power", "Salir de Pizarra Virtual")
-        quit_btn.clicked.connect(self.ctrl.quit)
 
-        buttons = (undo, redo, clear, self.zoom_btn, capture, self.paste_btn, folder, self.hide_btn, help_btn,
-                   quit_btn)
+        buttons = (undo, redo, clear, self.zoom_btn, capture, self.paste_btn, folder, self.hide_btn, help_btn)
         for idx, b in enumerate(buttons):
             actions.addWidget(b, idx // 3, idx % 3)
         c2.addLayout(actions)
