@@ -27,6 +27,9 @@ detiene si falta.
 - La barra avanzada ya no lleva el rótulo «Presentación» (sus botones explican su función).
 
 ### Corregido
+- **Diálogos ilegibles**: el aviso «¿Guardar los cambios?» al salir (y la ayuda, «Eliminar página»,
+  los errores y el temporizador personalizado) mostraba la letra gris clara de la barra sobre el
+  fondo claro de Windows. Ahora usan letra oscura; la barra mantiene su estilo.
 - Al cambiar el modo táctil, la barra anterior seguía recibiendo los avisos de cambio de estado
   (no se desconectaba).
 

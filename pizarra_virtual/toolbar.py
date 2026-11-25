@@ -63,6 +63,17 @@ QMenu::item { padding: 11px 26px; }
 """
 
 
+def _scoped(css: str) -> str:
+    """Limita el estilo oscuro a los controles de la barra (los que están dentro de «#panel»).
+
+    Los diálogos (guardar cambios, ayuda, eliminar página…) son hijos de la barra y heredarían
+    su letra clara sobre el fondo claro de Windows, y no se leerían. Los menús sí se mantienen
+    oscuros (también los que se abren fuera del panel).
+    """
+    return "\n".join("#panel " + line if line.startswith("Q") and not line.startswith("QMenu") else line
+                      for line in css.splitlines())
+
+
 class _Header(QWidget):
     """Zona de arrastre de la barra."""
 
@@ -107,7 +118,7 @@ class Toolbar(QWidget):
         self.k = k
         self.btn = int(round(BTN * k))
         self.col_width = 3 * self.btn + 2 * 4
-        self.setStyleSheet(STYLE + (TOUCH_STYLE if ctrl.touch_mode else ""))
+        self.setStyleSheet(_scoped(STYLE + (TOUCH_STYLE if ctrl.touch_mode else "")))
         self._shortcuts: list[QShortcut] = []
         self._build()
         self._build_shortcuts()

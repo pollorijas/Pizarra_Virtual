@@ -161,3 +161,27 @@ def test_touch_mode_keeps_basic_toolbar(ctrl, qapp):
     assert tb.height() <= 728  # sigue cabiendo en un notebook de 1366×768, con botones grandes
     ctrl.set_touch_mode(False)
     QTest.qWait(30)
+
+
+def _darkest(widget) -> int:
+    img = widget.grab().toImage()
+    return min(img.pixelColor(x, y).lightness() for x in range(0, img.width(), 2) for y in range(0, img.height(), 2))
+
+
+def test_dialogs_use_dark_readable_text(ctrl, qapp):
+    """Los diálogos (p. ej. «¿Guardar los cambios?» al salir) no heredan la letra clara de la barra."""
+    from PySide6.QtWidgets import QLabel, QMessageBox
+
+    box = QMessageBox(QMessageBox.Icon.Question, "Pizarra Virtual", "Hay cambios sin guardar.",
+                      QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard, ctrl.toolbar)
+    box.button(QMessageBox.StandardButton.Discard).setText("No guardar")
+    box.show()
+    qapp.processEvents()
+    label = next(w for w in box.findChildren(QLabel) if w.text() == "Hay cambios sin guardar.")
+    assert _darkest(label) < 90  # letra oscura (antes, gris claro: ~200)
+    assert _darkest(box.button(QMessageBox.StandardButton.Discard)) < 90
+    box.done(0)  # (close() no cierra un QMessageBox sin botón de cancelar)
+    box.deleteLater()
+    # La barra sigue con su estilo oscuro y letra clara
+    tb_img = ctrl.toolbar.panel.grab().toImage()
+    assert tb_img.pixelColor(tb_img.width() // 2, 4).lightness() < 80
