@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
 from . import icons, instruments
 from . import templates
 from .tools import (
-    BACKGROUNDS, BRUSH_LABELS, CURTAIN_SIDES, EXTRA_SHAPES, FILLABLE_SHAPES, MAIN_TOOLS, NOTE_COLORS, PALETTE,
+    BACKGROUNDS, BASIC_TOOLS, BRUSH_LABELS, CURTAIN_SIDES, EXTRA_SHAPES, FILLABLE_SHAPES, MAIN_TOOLS, NOTE_COLORS, PALETTE,
     PATTERNS, RECOGNIZABLE_TOOLS, STAMPS, TOOL_SPECS, UNSIZED_TOOLS, BrushType, Tool,
 )
 
@@ -97,6 +97,8 @@ class Toolbar(QWidget):
             Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool,
         )
         self.ctrl = ctrl
+        self.basic = ctrl.basic_toolbar  # barra básica (lo más usado) o avanzada (todo)
+        self._submenus: dict[str, QMenu] = {}
         self.setWindowTitle("Pizarra Virtual")
         self.setWindowIcon(icons.app_icon())
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
@@ -214,6 +216,90 @@ class Toolbar(QWidget):
             menu.addAction("Quitar los instrumentos").triggered.connect(lambda: c.hide_instruments())
         return menu
 
+    def _submenu(self, menu: QMenu, key: str, title: str, build, icon_name: str | None = None) -> None:
+        """Añade un submenú que se rehace al abrirlo (se crea una vez y se reutiliza)."""
+        sub = self._submenus.get(key)
+        if sub is None:
+            sub = QMenu(title, self)
+            if icon_name:
+                sub.setIcon(icons.icon(icon_name))
+            sub.aboutToShow.connect(lambda m=sub: build(m))
+            self._submenus[key] = sub
+        menu.addMenu(sub)
+
+    def _choices_menu(self, menu: QMenu, options: dict, current: str, choose) -> QMenu:
+        menu.clear()
+        for key, label in options.items():
+            act = menu.addAction(label)
+            act.setCheckable(True)
+            act.setChecked(current == key)
+            act.triggered.connect(lambda _c=False, k=key: choose(k))
+        return menu
+
+    def _check(self, menu: QMenu, icon_name: str, text: str, checked: bool, slot) -> None:
+        act = menu.addAction(icons.icon(icon_name), text)
+        act.setCheckable(True)
+        act.setChecked(checked)
+        act.triggered.connect(lambda _c=False: slot())
+
+    def build_basic_menu(self, menu: QMenu | None = None) -> QMenu:
+        """Menú «Más» de la barra básica: todo lo que la barra avanzada muestra con botones."""
+        menu = menu if menu is not None else QMenu(self)
+        menu.clear()
+        c = self.ctrl
+        self._submenu(menu, "bg", "Fondo de la pizarra",
+                      lambda m: self._choices_menu(m, BACKGROUNDS, c.background, c.set_background))
+        self._submenu(menu, "pattern", "Pauta",
+                      lambda m: self._choices_menu(m, PATTERNS, c.pattern, c.set_pattern))
+        menu.addSeparator()
+        for tool in (Tool.LINE, Tool.ARROW):
+            spec = TOOL_SPECS[tool]
+            self._check(menu, spec.icon, f"{spec.label}\t{spec.key}", c.tool == tool, lambda t=tool: c.set_tool(t))
+        self._submenu(menu, "shapes", "Más figuras", self.build_shapes_menu, "shapes_more")
+        self._submenu(menu, "stamps", "Sellos", self.build_stamps_menu, "stamp")
+        self._submenu(menu, "templates", "Plantillas", self.build_templates_menu, "templates")
+        self._submenu(menu, "instruments", "Regla, transportador y compás", self.build_instruments_menu, "ruler")
+        spec = TOOL_SPECS[Tool.SELECT]
+        self._check(menu, spec.icon, "Seleccionar y mover\tA", c.tool == Tool.SELECT,
+                    lambda: c.set_tool(Tool.SELECT))
+        menu.addAction(icons.icon("paste"), "Pegar imagen o texto\tCtrl+V").triggered.connect(lambda: c.paste())
+        menu.addSeparator()
+        self._check(menu, "spotlight", "Foco\tF", c.spotlight, c.toggle_spotlight)
+        self._submenu(menu, "curtain", "Cortina", self.build_curtain_menu, "curtain")
+        spec = TOOL_SPECS[Tool.COVER]
+        self._check(menu, spec.icon, "Tapar zona\tH", c.tool == Tool.COVER, lambda: c.set_tool(Tool.COVER))
+        self._check(menu, "highlight", "Resaltar cursor y clics\tM", c.highlight, c.toggle_highlight)
+        self._check(menu, "keys", "Mostrar teclas pulsadas\tCtrl+Alt+K", c.show_keys, c.toggle_show_keys)
+        self._submenu(menu, "timer", "Temporizador", self.build_timer_menu, "timer")
+        self._check(menu, "zoom", "Zoom\tZ", c.zoom_active, c.toggle_zoom)
+        menu.addSeparator()
+        pages = menu.addAction(f"Página {c.page_index + 1} de {len(c.pages)}")
+        pages.setEnabled(False)
+        prev_act = menu.addAction(icons.icon("page_prev"), "Página anterior\tRePág")
+        prev_act.setEnabled(c.page_index > 0)
+        prev_act.triggered.connect(lambda: c.prev_page())
+        next_act = menu.addAction(icons.icon("page_next"), "Página siguiente\tAvPág")
+        next_act.setEnabled(c.page_index < len(c.pages) - 1)
+        next_act.triggered.connect(lambda: c.next_page())
+        menu.addAction(icons.icon("page_add"), "Página nueva\tN").triggered.connect(lambda: c.new_page())
+        menu.addSeparator()
+        capture = self.capture_btn.menu()
+        capture.setTitle("Captura de pantalla y recortar zona")
+        capture.setIcon(icons.icon("camera"))
+        menu.addMenu(capture)
+        session = self.folder_btn.menu()
+        session.setTitle("Sesión y PDF")
+        session.setIcon(icons.icon("file"))
+        menu.addMenu(session)
+        help_menu = self.help_btn.menu()
+        help_menu.setTitle("Ayuda")
+        help_menu.setIcon(icons.icon("help"))
+        menu.addMenu(help_menu)
+        menu.addSeparator()
+        menu.addAction(icons.icon("options"), "Barra avanzada (todas las opciones)").triggered.connect(
+            lambda: c.set_basic_toolbar(False))
+        return menu
+
     def build_templates_menu(self, menu: QMenu | None = None) -> QMenu:
         menu = menu if menu is not None else QMenu(self)
         menu.clear()
@@ -239,6 +325,7 @@ class Toolbar(QWidget):
         # Cabecera (arrastrar + plegar)
         header = _Header(self)
         header.setMinimumWidth(self.col_width)
+        self._header = header
         hl = QHBoxLayout(header)
         hl.setContentsMargins(0, 0, 0, 0)
         title = QLabel("⠿ Pizarra")
@@ -264,14 +351,25 @@ class Toolbar(QWidget):
         hl.addWidget(self.quit_btn)
         lay.addWidget(header)
 
-        # Cuerpo en dos bloques. En pantallas bajas (p. ej. 1366x768 al 150 %) la barra no
-        # cabe en vertical, así que los bloques se colocan uno al lado del otro.
+        # Cuerpo. Barra avanzada: dos bloques que en pantallas bajas (p. ej. 1366x768 al 150 %) se
+        # colocan uno al lado del otro. Barra básica: un solo bloque con lo más usado.
         self.body = QWidget()
-        self.body_layout = QBoxLayout(QBoxLayout.Direction.TopToBottom, self.body)
+        body_lay = QVBoxLayout(self.body)
+        body_lay.setContentsMargins(0, 0, 0, 0)
+        body_lay.setSpacing(4)
+        # Arriba de todo, «Ocultar» y «Dibujando / Ratón libre» (lado a lado si hay dos columnas)
+        self.top = QWidget()
+        self.top_layout = QBoxLayout(QBoxLayout.Direction.TopToBottom, self.top)
+        self.top_layout.setContentsMargins(0, 0, 0, 0)
+        self.top_layout.setSpacing(4)
+        body_lay.addWidget(self.top)
+        self.cols = QWidget()
+        self.body_layout = QBoxLayout(QBoxLayout.Direction.TopToBottom, self.cols)
         self.body_layout.setContentsMargins(0, 0, 0, 0)
         self.body_layout.setSpacing(6)
+        body_lay.addWidget(self.cols)
         columns = []
-        for _ in range(2):
+        for _ in range(1 if self.basic else 2):
             col = QWidget()
             col.setFixedWidth(self.col_width)
             col_lay = QVBoxLayout(col)
@@ -280,38 +378,61 @@ class Toolbar(QWidget):
             self.body_layout.addWidget(col, 0, Qt.AlignmentFlag.AlignTop)
             columns.append(col_lay)
         self._columns = [lay_.parentWidget() for lay_ in columns]
-        c1, c2 = columns
         lay.addWidget(self.body)
 
+        widgets = self._create_widgets()
+        self.top_layout.addWidget(self.hide_btn)
+        self.top_layout.addWidget(self.mode_btn)
+        if self.basic:
+            self._layout_basic(columns[0])
+        else:
+            self._layout_advanced(*columns)
+        # Lo que esta barra no muestra queda guardado en un contenedor oculto: sigue existiendo
+        # (sync() lo actualiza y sus menús funcionan), pero nunca se ve.
+        self._spare = QWidget(self)
+        self._spare.hide()
+        for w in widgets:
+            if w.parentWidget() is None:
+                w.setParent(self._spare)
+        self.set_two_columns(False)
+
+    def _wide_button(self, icon_name: str, tip: str, height: int = 30) -> QToolButton:
+        """Botón con icono y texto que ocupa todo el ancho de la columna."""
+        b = QToolButton()
+        b.setObjectName("mode")
+        b.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        b.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        b.setIcon(icons.icon(icon_name))
+        b.setIconSize(QSize(int(18 * self.k), int(18 * self.k)))
+        b.setFixedHeight(int(height * self.k))
+        b.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        b.setToolTip(tip)
+        return b
+
+    def _create_widgets(self) -> list[QWidget]:
+        """Crea todos los controles (los dos modos de barra usan los mismos); devuelve la lista."""
+        c = self.ctrl
+        # Ocultar / mostrar la pizarra: arriba de todo, fácil de encontrar
+        self.hide_btn = self._wide_button("eye_off", "Ocultar o mostrar todo lo dibujado (Ctrl+Alt+H)", 28)
+        self.hide_btn.setCheckable(True)
+        self.hide_btn.clicked.connect(lambda: c.toggle_visible())
+
         # Modo dibujo / ratón libre
-        self.mode_btn = QToolButton()
-        self.mode_btn.setObjectName("mode")
+        self.mode_btn = self._wide_button("pencil", "Activar / desactivar el dibujo (Ctrl+Alt+D).\n"
+                                                    "En «Ratón libre» los clics llegan a las ventanas de debajo.", 28)
         self.mode_btn.setCheckable(True)
-        self.mode_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.mode_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        self.mode_btn.setIconSize(QSize(int(18 * self.k), int(18 * self.k)))
-        self.mode_btn.setFixedHeight(int(30 * self.k))
-        self.mode_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.mode_btn.setToolTip("Activar / desactivar el dibujo (Ctrl+Alt+D).\n"
-                                 "En «Ratón libre» los clics llegan a las ventanas de debajo.")
-        self.mode_btn.clicked.connect(lambda: self.ctrl.toggle_drawing())
-        c1.addWidget(self.mode_btn)
+        self.mode_btn.clicked.connect(lambda: c.toggle_drawing())
 
         # Herramientas
-        grid = QGridLayout()
-        grid.setSpacing(4)
         self.tool_group = QButtonGroup(self)
         self.tool_group.setExclusive(True)
         self.tool_buttons: dict[Tool, QToolButton] = {}
-        for idx, tool in enumerate(MAIN_TOOLS):
+        for tool in MAIN_TOOLS:
             spec = TOOL_SPECS[tool]
             b = self._tool_button(spec.icon, f"{spec.label}  [{spec.key}]", checkable=True)
-            b.clicked.connect(lambda _=False, t=tool: self.ctrl.set_tool(t))
+            b.clicked.connect(lambda _=False, t=tool: c.set_tool(t))
             self.tool_group.addButton(b)
             self.tool_buttons[tool] = b
-            grid.addWidget(b, idx // 3, idx % 3)
-        # Más figuras, sellos y plantillas: un botón con menú cada uno
-        n = len(MAIN_TOOLS)
         self.more_shapes_btn = self._menu_button("shapes_more", "Más figuras: polígonos, rombo, estrella, ejes,\n"
                                                                  "flecha doble, flecha curva, llave…", self.build_shapes_menu)
         self.stamp_btn = self._menu_button("stamp", "Sellos: ✔, ✘, estrella, carita, números, ?  [S]",
@@ -319,20 +440,18 @@ class Toolbar(QWidget):
         self.templates_btn = self._menu_button("templates", "Plantillas: mapa conceptual, línea de tiempo,\n"
                                                             "diagramas de Venn, tablas, esquema de redacción…",
                                                self.build_templates_menu, checkable=False)
-        # Seleccionar y mover, temporizador y pegar
         spec = TOOL_SPECS[Tool.SELECT]
         self.select_btn = self._tool_button(spec.icon, "Seleccionar y mover  [A]\nClic en algo o arrastra un lazo; "
                                                        "arrastra para mover, la esquina para cambiar el tamaño.\n"
                                                        "Supr: eliminar · Ctrl+D: duplicar · Ctrl+A: todo",
                                             checkable=True)
-        self.select_btn.clicked.connect(lambda: self.ctrl.set_tool(Tool.SELECT))
+        self.select_btn.clicked.connect(lambda: c.set_tool(Tool.SELECT))
         self.tool_group.addButton(self.select_btn)
         self.tool_buttons[Tool.SELECT] = self.select_btn
         self.timer_btn = self._menu_button("timer", "Temporizador en pantalla (cuenta regresiva o cronómetro)",
                                            self.build_timer_menu, checkable=False)
         self.paste_btn = self._tool_button("paste", "Pegar una imagen o un texto copiado  [Ctrl+V]")
-        self.paste_btn.clicked.connect(lambda: self.ctrl.paste())
-        # Notas adhesivas (el temporizador va con la presentación)
+        self.paste_btn.clicked.connect(lambda: c.paste())
         self.note_btn = self._menu_button("note", "Nota adhesiva  [O]: haz clic donde quieras pegarla y escribe.\n"
                                                   "Elige aquí el color del papel.", self.build_notes_menu)
         self.instruments_btn = self._menu_button(
@@ -340,60 +459,43 @@ class Toolbar(QWidget):
                      "Arrástralos para moverlos; el botón azul los gira. Un trazo que empieza\n"
                      "junto a la regla sale recto; el compás dibuja al girar la punta del lápiz.",
             self.build_instruments_menu)
-        for k, b in enumerate((self.more_shapes_btn, self.stamp_btn, self.templates_btn,
-                               self.select_btn, self.note_btn, self.instruments_btn)):
-            grid.addWidget(b, (n + k) // 3, (n + k) % 3)
-        c1.addLayout(grid)
+        # Barra básica: un solo botón con lo demás (fondo, pauta, figuras, presentación, páginas…)
+        self.more_btn = self._menu_button("more", "Más: fondo y pauta de la pizarra, más figuras, presentación\n"
+                                                  "(foco, cortina, temporizador, zoom), páginas, capturas y sesión",
+                                          self.build_basic_menu)
 
-        # Tipo de pincel
+        # Opciones de la herramienta
         self.brush_combo = QComboBox()
         self.brush_combo.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.brush_combo.setToolTip("Tipo de pincel [B]")
         for bt, label in BRUSH_LABELS.items():
             self.brush_combo.addItem(label, bt.value)
         self.brush_combo.currentIndexChanged.connect(
-            lambda i: self.ctrl.set_brush_type(BrushType(self.brush_combo.itemData(i))))
-        c1.addWidget(self.brush_combo)
+            lambda i: c.set_brush_type(BrushType(self.brush_combo.itemData(i))))
 
-        # Relleno de figuras
-        self.fill_btn = QToolButton()
-        self.fill_btn.setText("Relleno")
-        self.fill_btn.setCheckable(True)
-        self.fill_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.fill_btn.setToolTip("Figuras rellenas [R]")
-        self.fill_btn.setFixedHeight(int(24 * self.k))
-        self.fill_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.fill_btn.clicked.connect(lambda c: self.ctrl.set_fill(c))
-        c1.addWidget(self.fill_btn)
+        def option(text: str, tip: str, slot) -> QToolButton:
+            b = QToolButton()
+            b.setText(text)
+            b.setCheckable(True)
+            b.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            b.setToolTip(tip)
+            b.setFixedHeight(int(24 * self.k))
+            b.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+            b.clicked.connect(slot)
+            return b
 
+        self.fill_btn = option("Relleno", "Figuras rellenas [R]", lambda on: c.set_fill(on))
         # Formas perfectas (reconocimiento de formas): opción que se activa a voluntad
-        self.recognize_btn = QToolButton()
-        self.recognize_btn.setText("Formas perfectas")
-        self.recognize_btn.setCheckable(True)
-        self.recognize_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.recognize_btn.setToolTip("Formas perfectas [G]: al soltar el trazo, las líneas, círculos,\n"
-                                      "rectángulos y polígonos dibujados a mano se vuelven figuras exactas.\n"
-                                      "Desactívalo para dibujar libremente.")
-        self.recognize_btn.setFixedHeight(int(24 * self.k))
+        self.recognize_btn = option("Formas perfectas",
+                                    "Formas perfectas [G]: al soltar el trazo, las líneas, círculos,\n"
+                                    "rectángulos y polígonos dibujados a mano se vuelven figuras exactas.\n"
+                                    "Desactívalo para dibujar libremente.", lambda on: c.set_recognize_shapes(on))
         small_font = QFont(self.recognize_btn.font())
         small_font.setPixelSize(int(10 * self.k))
         self.recognize_btn.setFont(small_font)
-        self.recognize_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.recognize_btn.clicked.connect(lambda c: self.ctrl.set_recognize_shapes(c))
-        c1.addWidget(self.recognize_btn)
-
-        # Negrita (texto)
-        self.bold_btn = QToolButton()
-        self.bold_btn.setText("Negrita")
+        self.bold_btn = option("Negrita", "Texto en negrita", lambda on: c.set_text_bold(on))
         self.bold_btn.setIcon(icons.icon("bold"))
         self.bold_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        self.bold_btn.setCheckable(True)
-        self.bold_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.bold_btn.setToolTip("Texto en negrita")
-        self.bold_btn.setFixedHeight(int(24 * self.k))
-        self.bold_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.bold_btn.clicked.connect(lambda c: self.ctrl.set_text_bold(c))
-        c1.addWidget(self.bold_btn)
 
         # Color
         self.color_btn = QPushButton()
@@ -402,9 +504,9 @@ class Toolbar(QWidget):
         self.color_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.color_btn.setToolTip("Elegir color personalizado [C]")
         self.color_btn.clicked.connect(self.pick_color)
-        c1.addWidget(self.color_btn)
-
-        sw = QGridLayout()
+        self.swatches = QWidget()
+        sw = QGridLayout(self.swatches)
+        sw.setContentsMargins(0, 0, 0, 0)
         sw.setSpacing(4)
         for idx, hexcolor in enumerate(PALETTE):
             b = QPushButton()
@@ -413,55 +515,41 @@ class Toolbar(QWidget):
             b.setFocusPolicy(Qt.FocusPolicy.NoFocus)
             b.setToolTip(hexcolor)
             b.setStyleSheet(f"background: {hexcolor};")
-            b.clicked.connect(lambda _=False, c=hexcolor: self.ctrl.set_color(QColor(c)))
+            b.clicked.connect(lambda _=False, col=hexcolor: c.set_color(QColor(col)))
             sw.addWidget(b, idx // 4, idx % 4)
-        c1.addLayout(sw)
 
-        # Grosor
+        # Grosor y opacidad
         self.size_label = QLabel()
-        c2.addWidget(self.size_label)
         self.size_slider = QSlider(Qt.Orientation.Horizontal)
         self.size_slider.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.size_slider.setToolTip("Grosor (rueda del ratón sobre la pizarra, o teclas + / -)")
-        self.size_slider.valueChanged.connect(lambda v: self.ctrl.set_size(v))
-        c2.addWidget(self.size_slider)
-
-        # Opacidad
+        self.size_slider.valueChanged.connect(lambda v: c.set_size(v))
         self.opacity_label = QLabel()
-        c2.addWidget(self.opacity_label)
         self.opacity_slider = QSlider(Qt.Orientation.Horizontal)
         self.opacity_slider.setRange(5, 100)
         self.opacity_slider.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.opacity_slider.setToolTip("Opacidad (Mayús + rueda del ratón)")
-        self.opacity_slider.valueChanged.connect(lambda v: self.ctrl.set_opacity(v))
-        c2.addWidget(self.opacity_slider)
+        self.opacity_slider.valueChanged.connect(lambda v: c.set_opacity(v))
 
-        # Fondo (sin rótulo: la barra debe caber en pantallas bajas)
+        # Fondo y pauta (sin rótulo: la barra debe caber en pantallas bajas)
         self.bg_combo = QComboBox()
         self.bg_combo.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.bg_combo.setToolTip("Fondo de la pizarra: transparente, oscurecer el escritorio, blanca o verde")
         for key, label in BACKGROUNDS.items():
             self.bg_combo.addItem(label, key)
-        self.bg_combo.currentIndexChanged.connect(
-            lambda i: self.ctrl.set_background(self.bg_combo.itemData(i)))
-        c2.addWidget(self.bg_combo)
+        self.bg_combo.currentIndexChanged.connect(lambda i: c.set_background(self.bg_combo.itemData(i)))
         self.pattern_combo = QComboBox()
         self.pattern_combo.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.pattern_combo.setToolTip("Pauta de la página: cuadrícula, rayado, caligrafía, plano cartesiano…")
         for key, label in PATTERNS.items():
             self.pattern_combo.addItem(label, key)
-        self.pattern_combo.currentIndexChanged.connect(
-            lambda i: self.ctrl.set_pattern(self.pattern_combo.itemData(i)))
-        c2.addWidget(self.pattern_combo)
+        self.pattern_combo.currentIndexChanged.connect(lambda i: c.set_pattern(self.pattern_combo.itemData(i)))
 
-        # Presentación: foco, cortina, resaltar cursor
-        c2.addWidget(self._section("Presentación"))
-        fx = QGridLayout()
-        fx.setSpacing(4)
+        # Presentación
         self.spot_btn = self._tool_button("spotlight", "Foco: oscurece todo menos alrededor del cursor\n"
                                                        "[F / Ctrl+Alt+F] · Alt + rueda: tamaño\n"
                                                        "Clic derecho o Shift+F: círculo o rectángulo", checkable=True)
-        self.spot_btn.clicked.connect(lambda: self.ctrl.toggle_spotlight())
+        self.spot_btn.clicked.connect(lambda: c.toggle_spotlight())
         self.spot_btn.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.spot_btn.customContextMenuRequested.connect(self._spotlight_menu)
         self.curtain_btn = self._menu_button("curtain", "Cortina: tapa la pantalla y se descubre poco a poco\n"
@@ -471,71 +559,106 @@ class Toolbar(QWidget):
         spec = TOOL_SPECS[Tool.COVER]
         self.cover_btn = self._tool_button(spec.icon, "Tapar zona  [H]: arrastra para tapar una parte (p. ej. las\n"
                                                       "respuestas); un clic sobre ella la descubre.", checkable=True)
-        self.cover_btn.clicked.connect(lambda: self.ctrl.set_tool(Tool.COVER))
+        self.cover_btn.clicked.connect(lambda: c.set_tool(Tool.COVER))
         self.tool_group.addButton(self.cover_btn)
         self.tool_buttons[Tool.COVER] = self.cover_btn
         self.highlight_btn = self._tool_button("highlight", "Resaltar el cursor y los clics [M / Ctrl+Alt+M]",
                                                checkable=True)
-        self.highlight_btn.clicked.connect(lambda: self.ctrl.toggle_highlight())
+        self.highlight_btn.clicked.connect(lambda: c.toggle_highlight())
         self.keys_btn = self._tool_button("keys", "Mostrar en pantalla los atajos que se pulsan\n"
                                                   "(Ctrl + C, Alt + Tab, Intro…) [Ctrl+Alt+K].\n"
                                                   "El texto que se escribe no se muestra.", checkable=True)
-        self.keys_btn.clicked.connect(lambda: self.ctrl.toggle_show_keys())
-        for i, b in enumerate((self.spot_btn, self.curtain_btn, self.cover_btn, self.highlight_btn,
-                               self.keys_btn, self.timer_btn)):
-            fx.addWidget(b, i // 3, i % 3)
-        c2.addLayout(fx)
+        self.keys_btn.clicked.connect(lambda: c.toggle_show_keys())
 
         # Páginas
         self.page_label = QLabel()
         self.page_label.setObjectName("section")
+        self.prev_btn = self._tool_button("page_prev", "Página anterior [RePág]")
+        self.prev_btn.clicked.connect(c.prev_page)
+        self.next_btn = self._tool_button("page_next", "Página siguiente [AvPág]")
+        self.next_btn.clicked.connect(c.next_page)
+        self.add_page_btn = self._tool_button("page_add", "Página nueva [N]")
+        self.add_page_btn.clicked.connect(c.new_page)
+
+        # Acciones
+        self.undo_btn = self._tool_button("undo", "Deshacer (Ctrl+Z)")
+        self.undo_btn.clicked.connect(c.undo)
+        self.redo_btn = self._tool_button("redo", "Rehacer (Ctrl+Y)")
+        self.redo_btn.clicked.connect(c.redo)
+        self.clear_btn = self._tool_button("trash", "Borrar todo (Supr)")
+        self.clear_btn.clicked.connect(c.clear_all)
+        self.capture_btn = self._tool_button("camera", "Captura de pantalla y recortar zona [X]")
+        self.capture_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.capture_btn.setMenu(c.build_capture_menu(self.capture_btn))
+        self.folder_btn = self._tool_button("file", "Sesión: abrir, guardar, exportar a PDF")
+        self.folder_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.folder_btn.setMenu(c.build_file_menu(self.folder_btn))
+        self.zoom_btn = self._tool_button("zoom", "Zoom: ampliar la zona bajo el cursor (Z / Ctrl+Alt+Z)",
+                                          checkable=True)
+        self.zoom_btn.clicked.connect(lambda: c.toggle_zoom())
+        self.help_btn = self._tool_button("help", "Ayuda: atajos de teclado (F1) y manual de usuario")
+        self.help_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        help_menu = QMenu(self.help_btn)
+        help_menu.addAction(icons.icon("help"), "Atajos de teclado\tF1", c.show_help)
+        help_menu.addAction(icons.icon("pdf"), "Manual de usuario (PDF)", c.open_manual)
+        self.help_btn.setMenu(help_menu)
+
+        # Barra básica ↔ avanzada
+        if self.basic:
+            self.layout_btn = self._wide_button("options", "Mostrar todas las herramientas y opciones (barra avanzada)",
+                                                26)
+            self.layout_btn.setText("Más opciones")
+            self.layout_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
+        else:
+            self.layout_btn = self._tool_button("options", "Barra básica: solo las herramientas más usadas\n"
+                                                           "(más pequeña, para pantallas de poca resolución)")
+        self.layout_btn.clicked.connect(lambda: c.set_basic_toolbar(not self.basic))
+
+        return [w for w in vars(self).values() if isinstance(w, QWidget) and w is not self] + \
+            list(self.tool_buttons.values())
+
+    @staticmethod
+    def _add_grid(col: QVBoxLayout, buttons, cols: int = 3) -> None:
+        """Botones en filas de ``cols``, centrados en la columna."""
+        grid = QGridLayout()
+        grid.setSpacing(4)
+        for i, b in enumerate(buttons):
+            grid.addWidget(b, i // cols, i % cols)
+        col.addLayout(grid)
+        col.setAlignment(grid, Qt.AlignmentFlag.AlignHCenter)
+
+    def _layout_advanced(self, c1: QVBoxLayout, c2: QVBoxLayout) -> None:
+        """Barra avanzada: todas las herramientas y opciones."""
+        self._add_grid(c1, [self.tool_buttons[t] for t in MAIN_TOOLS] + [
+            self.more_shapes_btn, self.stamp_btn, self.templates_btn, self.select_btn, self.note_btn,
+            self.instruments_btn])
+        for w in (self.brush_combo, self.fill_btn, self.recognize_btn, self.bold_btn, self.color_btn):
+            c1.addWidget(w)
+        c1.addWidget(self.swatches, 0, Qt.AlignmentFlag.AlignHCenter)
+        for w in (self.size_label, self.size_slider, self.opacity_label, self.opacity_slider, self.bg_combo,
+                  self.pattern_combo):
+            c2.addWidget(w)
+        self._add_grid(c2, (self.spot_btn, self.curtain_btn, self.cover_btn, self.highlight_btn,
+                            self.keys_btn, self.timer_btn))
         c2.addWidget(self.page_label)
         pages = QHBoxLayout()
         pages.setSpacing(4)
-        self.prev_btn = self._tool_button("page_prev", "Página anterior [RePág]")
-        self.prev_btn.clicked.connect(self.ctrl.prev_page)
-        self.next_btn = self._tool_button("page_next", "Página siguiente [AvPág]")
-        self.next_btn.clicked.connect(self.ctrl.next_page)
-        add_page = self._tool_button("page_add", "Página nueva [N]")
-        add_page.clicked.connect(self.ctrl.new_page)
-        for b in (self.prev_btn, self.next_btn, add_page):
+        for b in (self.prev_btn, self.next_btn, self.add_page_btn):
             pages.addWidget(b)
         c2.addLayout(pages)
+        c2.setAlignment(pages, Qt.AlignmentFlag.AlignHCenter)
+        self._add_grid(c2, (self.undo_btn, self.redo_btn, self.clear_btn, self.zoom_btn, self.capture_btn,
+                            self.paste_btn, self.folder_btn, self.help_btn, self.layout_btn))
 
-        # Acciones
-        actions = QGridLayout()
-        actions.setSpacing(4)
-        undo = self._tool_button("undo", "Deshacer (Ctrl+Z)")
-        undo.clicked.connect(self.ctrl.undo)
-        redo = self._tool_button("redo", "Rehacer (Ctrl+Y)")
-        redo.clicked.connect(self.ctrl.redo)
-        clear = self._tool_button("trash", "Borrar todo (Supr)")
-        clear.clicked.connect(self.ctrl.clear_all)
-
-        capture = self._tool_button("camera", "Captura de pantalla y recortar zona [X]")
-        capture.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-        capture.setMenu(self.ctrl.build_capture_menu(capture))
-        folder = self._tool_button("file", "Sesión: abrir, guardar, exportar a PDF")
-        folder.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-        folder.setMenu(self.ctrl.build_file_menu(folder))
-        self.hide_btn = self._tool_button("eye_off", "Ocultar la pizarra (Ctrl+Alt+H)")
-        self.hide_btn.clicked.connect(self.ctrl.toggle_visible)
-
-        self.zoom_btn = self._tool_button("zoom", "Zoom: ampliar la zona bajo el cursor (Z / Ctrl+Alt+Z)",
-                                          checkable=True)
-        self.zoom_btn.clicked.connect(lambda: self.ctrl.toggle_zoom())
-
-        help_btn = self._tool_button("help", "Ayuda: atajos de teclado (F1) y manual de usuario")
-        help_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-        help_menu = QMenu(help_btn)
-        help_menu.addAction(icons.icon("help"), "Atajos de teclado\tF1", self.ctrl.show_help)
-        help_menu.addAction(icons.icon("pdf"), "Manual de usuario (PDF)", self.ctrl.open_manual)
-        help_btn.setMenu(help_menu)
-
-        buttons = (undo, redo, clear, self.zoom_btn, capture, self.paste_btn, folder, self.hide_btn, help_btn)
-        for idx, b in enumerate(buttons):
-            actions.addWidget(b, idx // 3, idx % 3)
-        c2.addLayout(actions)
+    def _layout_basic(self, c1: QVBoxLayout) -> None:
+        """Barra básica: lo más usado en una columna; lo demás, en el menú «Más»."""
+        self._add_grid(c1, [self.tool_buttons[t] for t in BASIC_TOOLS] + [self.note_btn, self.more_btn])
+        c1.addWidget(self.color_btn)
+        c1.addWidget(self.swatches, 0, Qt.AlignmentFlag.AlignHCenter)
+        c1.addWidget(self.size_label)
+        c1.addWidget(self.size_slider)
+        self._add_grid(c1, (self.undo_btn, self.redo_btn, self.clear_btn))
+        c1.addWidget(self.layout_btn)
 
     def _section(self, text: str) -> QLabel:
         label = QLabel(text.upper())
@@ -655,7 +778,7 @@ class Toolbar(QWidget):
         se reducía su contenido. Aquí se vacían esas cachés (updateGeometry) y se
         invalidan los tres niveles antes de recalcular.
         """
-        containers = [*self._columns, self.body, self.panel]  # de dentro hacia fuera
+        containers = [*self._columns, self.top, self.cols, self.body, self.panel]  # de dentro hacia fuera
         for w in containers:
             w.updateGeometry()
             w.layout().invalidate()
@@ -674,6 +797,16 @@ class Toolbar(QWidget):
     def horizontal(self) -> bool:
         return self.body_layout.direction() == QBoxLayout.Direction.LeftToRight
 
+    def set_two_columns(self, two: bool) -> None:
+        """Dos columnas lado a lado (y «Ocultar» junto a «Dibujando») o una sola columna."""
+        direction = QBoxLayout.Direction.LeftToRight if two else QBoxLayout.Direction.TopToBottom
+        self.body_layout.setDirection(direction)
+        self.top_layout.setDirection(direction)
+        # En una columna, la columna ocupa todo el ancho de la cabecera (los botones, centrados)
+        width = self.col_width if two else max(self.col_width, self._header.sizeHint().width())
+        for col in self._columns:
+            col.setFixedWidth(width)
+
     def update_orientation(self) -> None:
         """Una columna si la barra cabe en la altura de su pantalla; si no, dos columnas."""
         if self.collapsed:
@@ -691,13 +824,13 @@ class Toolbar(QWidget):
                 w.setVisible(True)
             for w in unshown:
                 w.setVisible(False)
-            self.body_layout.setDirection(QBoxLayout.Direction.TopToBottom)
+            self.set_two_columns(False)
             self.refit()
             needed = self.height()
             for w, vis in saved.items():
                 w.setVisible(vis)
             if needed > avail.height():
-                self.body_layout.setDirection(QBoxLayout.Direction.LeftToRight)
+                self.set_two_columns(True)
             self.refit()
         self.keep_on_screen()
 
@@ -778,7 +911,10 @@ class Toolbar(QWidget):
             self.prev_btn.setEnabled(c.page_index > 0)
             self.next_btn.setEnabled(c.page_index < len(c.pages) - 1)
             self.hide_btn.setIcon(icons.icon("eye_off" if c.visible else "eye"))
-            self.hide_btn.setToolTip(("Ocultar" if c.visible else "Mostrar") + " la pizarra (Ctrl+Alt+H)")
+            self.hide_btn.setText("Ocultar" if c.visible else "Mostrar")
+            self.hide_btn.setChecked(not c.visible)  # oculta: el botón queda resaltado
+            self.hide_btn.setToolTip(("Ocultar" if c.visible else "Mostrar") + " todo lo dibujado (Ctrl+Alt+H)")
+            self.more_btn.setChecked(c.tool not in BASIC_TOOLS and c.tool != Tool.NOTE)
             self.zoom_btn.setChecked(c.zoom_active)
         finally:
             for w in widgets:

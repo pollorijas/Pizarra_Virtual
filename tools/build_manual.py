@@ -28,7 +28,7 @@ from PySide6.QtGui import (  # noqa: E402
     QColor, QCursor, QFont, QFontDatabase, QFontInfo, QFontMetrics, QImage, QPageLayout, QPageSize, QPainter, QPdfWriter, QTextDocument,
 )
 from PySide6.QtTest import QTest  # noqa: E402
-from PySide6.QtWidgets import QApplication, QBoxLayout  # noqa: E402
+from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from pizarra_virtual import __version__, icons, session  # noqa: E402
 from pizarra_virtual.tools import PATTERNS, Tool  # noqa: E402
@@ -179,8 +179,9 @@ def build_images() -> dict[str, QImage]:
     app.setFont(ui_font())  # la misma letra que la aplicación en Windows (Segoe UI)
     tmp = tempfile.mkdtemp()
     os.environ["USERPROFILE"] = tmp
-    ctrl = Controller(app, settings=QSettings(os.path.join(tmp, "s.ini"), QSettings.Format.IniFormat),
-                      enable_hotkeys=False, enable_tray=False)
+    settings = QSettings(os.path.join(tmp, "s.ini"), QSettings.Format.IniFormat)
+    settings.setValue("basic_toolbar", "false")  # la barra completa (la básica tiene su propia imagen)
+    ctrl = Controller(app, settings=settings, enable_hotkeys=False, enable_tray=False)
     ctrl.start()
     app.processEvents()
     ov = next(iter(ctrl.overlays.values()))
@@ -189,7 +190,7 @@ def build_images() -> dict[str, QImage]:
 
     # Barra de herramientas en una columna (la herramienta pincel muestra sus opciones)
     ctrl.set_tool(Tool.BRUSH)
-    tb.body_layout.setDirection(QBoxLayout.Direction.TopToBottom)
+    tb.set_two_columns(False)
     tb.refit()
     app.processEvents()
     images["barra.png"] = tb.grab().toImage()
@@ -471,11 +472,37 @@ def _v15_images(ctrl, ov, app) -> dict[str, QImage]:
     ctrl.set_touch_mode(True)
     QTest.qWait(50)
     tb = ctrl.toolbar
-    tb.body_layout.setDirection(QBoxLayout.Direction.LeftToRight)  # en dos columnas: más baja
+    tb.set_two_columns(True)  # en dos columnas: más baja
     tb.refit()
     app.processEvents()
     out["barra_tactil.png"] = tb.grab().toImage()
     ctrl.set_touch_mode(False)
+    QTest.qWait(50)
+
+    # 8) Barra básica y su menú «Más»
+    ctrl.set_basic_toolbar(True)
+    QTest.qWait(50)
+    tb = ctrl.toolbar
+    tb.refit()
+    app.processEvents()
+    bar = tb.grab().toImage()
+    menu = tb.build_basic_menu()
+    menu.adjustSize()
+    more = menu.grab().toImage()
+    d = bar.devicePixelRatio()
+    gap = 24
+    img = QImage(round((bar.width() / d + gap + more.width() / more.devicePixelRatio()) * 2),
+                 round(max(bar.height() / d, more.height() / more.devicePixelRatio()) * 2),
+                 QImage.Format.Format_RGB32)
+    img.setDevicePixelRatio(2)
+    img.fill(QColor(255, 255, 255))
+    p = QPainter(img)
+    p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+    p.drawImage(QPointF(0, 0), bar)
+    p.drawImage(QPointF(bar.width() / d + gap, 0), more)
+    p.end()
+    out["barra_basica.png"] = img
+    ctrl.set_basic_toolbar(False)
     QTest.qWait(50)
     ctrl.toolbar.move(5000, 0)
     return out

@@ -37,6 +37,7 @@ EFFECTS_INTERVAL_MS = 16
 
 VK_D, VK_F, VK_H, VK_K, VK_M, VK_R, VK_S, VK_Z = 0x44, 0x46, 0x48, 0x4B, 0x4D, 0x52, 0x53, 0x5A
 TOUCH_SCALE = 1.45  # tamaño de los botones y zonas de agarre en el modo táctil
+BASIC_TOOLBAR_BELOW = 900  # px: en pantallas más bajas la barra empieza en su versión básica
 
 SPOTLIGHT_MIN, SPOTLIGHT_MAX, SPOTLIGHT_DEFAULT = 60, 600, 170
 SPOTLIGHT_SHAPES = {"circle": "Círculo", "rect": "Rectángulo"}
@@ -101,6 +102,9 @@ class Controller(QObject):
         self.show_keys = False  # mostrar en pantalla los atajos de teclado que se pulsan
         # Modo táctil: barra con botones grandes. Por defecto, activo si hay pantalla táctil.
         self.touch_mode = winutil.has_touch_screen()
+        # Barra básica (lo más usado). Por defecto, en pantallas bajas (p. ej. notebooks de 1366x768),
+        # donde la barra completa no cabe en una columna.
+        self.basic_toolbar = self._short_screen()
         self._load_settings()
 
         # Estado de la aplicación
@@ -735,13 +739,32 @@ class Controller(QObject):
     def toggle_touch_mode(self) -> None:
         self.set_touch_mode(not self.touch_mode)
 
+    @staticmethod
+    def _short_screen() -> bool:
+        screen = QGuiApplication.primaryScreen()
+        return screen is not None and screen.availableGeometry().height() < BASIC_TOOLBAR_BELOW
+
+    def set_basic_toolbar(self, on: bool) -> None:
+        """Barra básica (solo lo más usado, más pequeña) o avanzada (todas las opciones)."""
+        on = bool(on)
+        if on == self.basic_toolbar:
+            return
+        self.basic_toolbar = on
+        self.settings.setValue("basic_toolbar", "true" if on else "false")
+        QTimer.singleShot(0, self._rebuild_toolbar)  # después de terminar el clic que lo pidió
+        self._changed()
+
+    def toggle_basic_toolbar(self) -> None:
+        self.set_basic_toolbar(not self.basic_toolbar)
+
     def _rebuild_toolbar(self) -> None:
         if self._shutting_down:
             return
         old = self.toolbar
         visible = old.isVisible()
         old.save_position()
-        old.dispose()  # sus atajos dejan de responder ya, no cuando se destruya        self.state_changed.disconnect(old.sync)
+        old.dispose()  # sus atajos dejan de responder ya, no cuando se destruya
+        self.state_changed.disconnect(old.sync)
         old.hide()
         old.deleteLater()  # (sin close(): cerrar la barra cerraría el programa)
         self.toolbar = Toolbar(self)
@@ -1515,8 +1538,10 @@ class Controller(QObject):
         self._tray_keys.triggered.connect(lambda _c: self.toggle_show_keys())
         self._tray_touch = QAction("Modo táctil (botones grandes)", menu, checkable=True)
         self._tray_touch.triggered.connect(lambda c: self.set_touch_mode(c))
+        self._tray_basic = QAction("Barra básica (menos opciones)", menu, checkable=True)
+        self._tray_basic.triggered.connect(lambda c: self.set_basic_toolbar(c))
         for act in (self._tray_draw, self._tray_visible, self._tray_spot, self._tray_spot_rect, self._tray_highlight,
-                    self._tray_keys, self._tray_touch):
+                    self._tray_keys, self._tray_touch, self._tray_basic):
             menu.addAction(act)
         zoom_act = QAction("Zoom de pantalla\tCtrl+Alt+Z", menu)
         zoom_act.triggered.connect(self.toggle_zoom)
@@ -1558,6 +1583,7 @@ class Controller(QObject):
         self._tray_highlight.setChecked(self.highlight)
         self._tray_keys.setChecked(self.show_keys)
         self._tray_touch.setChecked(self.touch_mode)
+        self._tray_basic.setChecked(self.basic_toolbar)
 
     def _on_tray_activated(self, reason) -> None:
         if reason == QSystemTrayIcon.ActivationReason.Trigger:
@@ -1634,6 +1660,9 @@ class Controller(QObject):
             self.note_color = note if note in NOTE_COLORS else "yellow"
             side = str(s.value("curtain_side", "top"))
             self.curtain_side = side if side in CURTAIN_SIDES else "top"
+            basic = s.value("basic_toolbar")
+            if basic is not None:  # si nunca se eligió, depende del alto de la pantalla
+                self.basic_toolbar = str(basic).lower() == "true"
             touch = s.value("touch_mode")
             if touch is not None:  # si nunca se eligió, depende de si hay pantalla táctil
                 self.touch_mode = str(touch).lower() == "true"
@@ -1659,6 +1688,7 @@ class Controller(QObject):
         s.setValue("note_color", self.note_color)
         s.setValue("curtain_side", self.curtain_side)
         s.setValue("touch_mode", "true" if self.touch_mode else "false")
+        s.setValue("basic_toolbar", "true" if self.basic_toolbar else "false")
         s.sync()
 
 
@@ -1706,6 +1736,8 @@ Ctrl+V = pegar · flechas, Inicio y Fin = mover el cursor<br>
 <b>Pantalla táctil</b>: un dedo dibuja · toque con dos dedos = deshacer · con tres = rehacer ·
 con zoom, pellizcar acerca y aleja<br>
 <b>Clic sobre un texto ya escrito</b> = editarlo (arrástralo para moverlo)<br>
+<b>Barra básica</b> (lo más usado; lo demás en el botón ⋯) o <b>avanzada</b> (todo): botón
+«Más opciones» o el de los deslizadores<br>
 <b>Regla y transportador</b>: arrástralos para moverlos; el botón azul los gira (rueda: 1°).
 Un trazo que empieza junto a su borde sale recto (o sigue el arco) ·
 <b>Compás</b>: arrastra la pata amarilla para abrirlo y gira la punta del lápiz para dibujar</td></tr>

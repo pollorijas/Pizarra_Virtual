@@ -525,6 +525,23 @@ def _keys(p, c):
     p.drawLine(QPointF(19, 3.5), QPointF(18, 5))
 
 
+def _more(p, c):
+    """Más: tres puntos."""
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(c)
+    for x in (5, 12, 19):
+        p.drawEllipse(QPointF(x, 12), 2.3, 2.3)
+
+
+def _options(p, c):
+    """Opciones de la barra: tres deslizadores."""
+    p.setPen(_pen(c, 1.6))
+    for y, x in ((6, 15), (12, 8), (18, 13)):
+        p.drawLine(QPointF(3, y), QPointF(21, y))
+        p.setBrush(QColor(30, 32, 37))
+        p.drawEllipse(QPointF(x, y), 2.4, 2.4)
+
+
 def _ruler(p, c):
     """Regla inclinada con sus marcas."""
     p.translate(12, 12)
@@ -603,6 +620,7 @@ _ICONS = {
     "shapes_more": _shapes_more, "stamp": _stamp, "templates": _templates,
     "select": _select, "timer": _timer, "paste": _paste, "shapes_magic": _shapes_magic,
     "note": _note, "cover": _cover, "crop": _crop, "keys": _keys, "touch": _touch,
+    "more": _more, "options": _options,
     "ruler": _ruler, "protractor": _protractor, "compass": _compass,
 }
 for _name in ("pentagon", "hexagon", "octagon", "diamond", "star", "rounded_rect", "axes", "double_arrow",

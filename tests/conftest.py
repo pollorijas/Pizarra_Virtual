@@ -36,6 +36,9 @@ def ctrl(qapp, tmp_path, monkeypatch):
 
     monkeypatch.setenv("USERPROFILE", str(tmp_path))
     settings = QSettings(str(tmp_path / "settings.ini"), QSettings.Format.IniFormat)
+    # Las pruebas usan la barra avanzada (la básica se elige sola en pantallas bajas como la de
+    # pruebas; tiene sus propias pruebas)
+    settings.setValue("basic_toolbar", "false")
     c = Controller(qapp, settings=settings, enable_hotkeys=False, enable_tray=False)
     c.start()
     qapp.processEvents()

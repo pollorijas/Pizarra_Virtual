@@ -49,6 +49,9 @@ LINEAR_SHAPES = (Tool.LINE, Tool.ARROW, Tool.DOUBLE_ARROW, Tool.CURVED_ARROW)
 # Herramientas con botón propio en la barra (el resto va en los menús «Más figuras» y «Sellos»)
 MAIN_TOOLS = (Tool.BRUSH, Tool.PENCIL, Tool.PEN, Tool.HIGHLIGHTER, Tool.ERASER, Tool.TEXT, Tool.LASER,
               Tool.RECT, Tool.ELLIPSE, Tool.TRIANGLE, Tool.LINE, Tool.ARROW)
+# Barra básica: las herramientas más usadas (el resto, en su menú «Más»)
+BASIC_TOOLS = (Tool.BRUSH, Tool.PENCIL, Tool.PEN, Tool.HIGHLIGHTER, Tool.ERASER, Tool.TEXT,
+               Tool.RECT, Tool.ELLIPSE, Tool.TRIANGLE, Tool.LASER)
 POLYGON_SIDES = {Tool.PENTAGON: 5, Tool.HEXAGON: 6, Tool.OCTAGON: 8}
 
 

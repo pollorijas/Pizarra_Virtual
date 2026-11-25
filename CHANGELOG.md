@@ -9,6 +9,27 @@ incompatibles.
 Cada versión publicada debe tener su sección aquí: el flujo de publicación de GitHub Actions se
 detiene si falta.
 
+## [Sin publicar]
+
+### Añadido
+- **Barra básica**: una versión más pequeña de la barra con lo más usado en clase (ocultar, modo,
+  pincel, lápiz, pluma, destacador, goma, texto, rectángulo, elipse, triángulo, láser, nota,
+  colores, grosor, deshacer, rehacer y borrar). Todo lo demás está en su menú **Más** (⋯): fondo,
+  pauta, más figuras, sellos, plantillas, instrumentos, presentación, páginas, capturas, sesión y
+  ayuda. Ocupa la mitad de alto y cabe en una columna en notebooks de 1366×768. Se cambia con
+  **Más opciones** / el botón de los deslizadores o desde la bandeja, y se recuerda. La primera vez
+  empieza en básica si la pantalla tiene menos de 900 px útiles de alto.
+
+### Cambiado
+- **Ocultar / Mostrar** (el ojo) pasa arriba de todo, sobre «Dibujando / Ratón libre», como botón
+  ancho con texto; queda resaltado mientras la pizarra está oculta. En dos columnas, los dos botones
+  van uno al lado del otro.
+- La barra avanzada ya no lleva el rótulo «Presentación» (sus botones explican su función).
+
+### Corregido
+- Al cambiar el modo táctil, la barra anterior seguía recibiendo los avisos de cambio de estado
+  (no se desconectaba).
+
 ## [1.5.2] - 2026-11-25
 
 ### Añadido
