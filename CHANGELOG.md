@@ -9,7 +9,7 @@ incompatibles.
 Cada versión publicada debe tener su sección aquí: el flujo de publicación de GitHub Actions se
 detiene si falta.
 
-## [Sin publicar]
+## [1.5.2] - 2026-11-25
 
 ### Añadido
 - **Regla, transportador y compás** (botón de la regla en la barra, teclas **I**, **Y** y
