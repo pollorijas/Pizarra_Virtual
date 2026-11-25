@@ -7,7 +7,7 @@ from PySide6.QtGui import QColor, QImage, QWheelEvent
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
-from pizarra_virtual import instruments
+from pizarra_virtual import instruments, render
 from pizarra_virtual.instruments import Compass, Protractor, Ruler
 from pizarra_virtual.items import ShapeItem, StrokeItem
 from pizarra_virtual.tools import Tool
@@ -386,3 +386,100 @@ def test_new_instrument_fits_screen(ctrl, qapp):
     assert isinstance(ov.instruments["ruler"], Ruler)
     assert isinstance(ov.instruments["protractor"], Protractor)
     assert isinstance(ov.instruments["compass"], Compass)
+
+
+# ---------------------------------------------------------------------- correcciones de la revisión
+
+
+def test_compass_ignores_jitter_near_needle():
+    c = Compass(100, 100, 50)
+    c.press("draw", c.pencil())
+    c.drag(QPointF(150 * 0 + 145, 112))  # un poco de giro real
+    sweep = c.sweep
+    pts = c.drag(QPointF(102, 101)) + c.drag(QPointF(98, 101))  # temblor de 4 px junto a la aguja
+    assert pts == [] and c.sweep == sweep
+
+
+def test_compass_pen_arc_keeps_chosen_width(ctrl, qapp):
+    ov = _ov(ctrl)
+    ctrl.set_tool(Tool.PEN)
+    ctrl.set_size(10)
+    c = _compass(ctrl, r=150)
+    q = c.pencil()
+    pts = [(q.x(), q.y())] + [(400 + 200 * math.cos(math.radians(i * 4)), 420 + 200 * math.sin(math.radians(i * 4)))
+                              for i in range(1, 40)]
+    _drag(ov, pts)
+    (stroke,) = _strokes(ctrl, ov)
+    middle = [w for _x, _y, w in stroke.points[len(stroke.points) // 3: 2 * len(stroke.points) // 3]]
+    # Solo la dirección del plumín cambia el grosor (hasta un 30 %), no la «velocidad» de los puntos del arco
+    assert min(middle) >= 10 * (1 - render.PEN_DIRECTION_RANGE) * 0.98
+
+
+def test_instruments_hidden_in_mouse_mode(ctrl, qapp):
+    ov = _ov(ctrl)
+    ctrl.set_background("white")
+    ruler = _show(ctrl, "ruler")
+    _place(ruler, 300, 300)
+    edge = (300, 300 - ruler.width / 2)
+    assert _px(ov, _grab(ov), *edge).red() < 120
+    ctrl.set_drawing(False)
+    assert _px(ov, _grab(ov), *edge).alpha() < 10  # se aparta con la hoja
+    ctrl.set_drawing(True)
+    assert _px(ov, _grab(ov), *edge).red() < 120 and "ruler" in ov.instruments
+
+
+def test_click_on_compass_pencil_leaves_no_dot(ctrl, qapp):
+    ov = _ov(ctrl)
+    c = _compass(ctrl)
+    q = c.pencil()
+    _drag(ov, [(q.x(), q.y()), (q.x(), q.y())])
+    assert not _strokes(ctrl, ov) and ctrl.history == []
+
+
+def test_cancel_restores_instrument_and_close_acts_on_release(ctrl, qapp, touch):
+    ov = _ov(ctrl)
+    ruler = _show(ctrl, "ruler")
+    _place(ruler, 400, 300)
+    # Arrastre del cuerpo cancelado por un segundo dedo: la regla vuelve a su sitio
+    QTest.touchEvent(ov, touch).press(0, QPoint(400, 300)).commit()
+    QTest.touchEvent(ov, touch).move(0, QPoint(410, 305)).commit()
+    QTest.touchEvent(ov, touch).stationary(0).press(1, QPoint(100, 600)).commit()
+    QTest.touchEvent(ov, touch).release(0, QPoint(410, 305)).release(1, QPoint(100, 600)).commit()
+    assert (ruler.x, ruler.y) == (400, 300)
+    # El botón de cerrar no actúa al apoyar el dedo, sino al soltar sobre él
+    close = ruler.to_canvas(ruler.knobs(1.0)["close"]).toPoint()
+    QTest.touchEvent(ov, touch).press(0, close).commit()
+    assert "ruler" in ov.instruments
+    QTest.touchEvent(ov, touch).stationary(0).press(1, QPoint(100, 600)).commit()
+    QTest.touchEvent(ov, touch).release(0, close).release(1, QPoint(100, 600)).commit()
+    assert "ruler" in ov.instruments  # era un gesto de dos dedos
+    _drag(ov, [(close.x(), close.y()), (close.x() + 200, close.y() + 200)])
+    assert "ruler" in ov.instruments  # se soltó fuera del botón
+    _drag(ov, [(close.x(), close.y()), (close.x(), close.y())])
+    assert "ruler" not in ov.instruments
+
+
+def test_instrument_opened_with_zoom_fits_view(ctrl, qapp):
+    ov = _ov(ctrl)
+    shot = QImage(ov.canvas.size(), QImage.Format.Format_ARGB32_Premultiplied)
+    shot.fill(QColor("white"))
+    ov.start_zoom(shot, QPointF(ov.width() / 2, ov.height() / 2), 3.0)
+    top_left = ov.to_canvas(QPointF(0, 0))
+    bottom_right = ov.to_canvas(QPointF(ov.width(), ov.height()))
+    for kind in instruments.INSTRUMENTS:
+        inst = _show(ctrl, kind)
+        box = inst.transform().map(inst.outline(1.0)).boundingRect()
+        assert box.left() >= top_left.x() and box.right() <= bottom_right.x(), kind
+        assert box.top() >= top_left.y() and box.bottom() <= bottom_right.y(), kind
+    ov.end_zoom()
+
+
+def test_angle_labels():
+    assert instruments.shown_angle(180) == 0 and instruments.shown_angle(-30) == 30
+    assert instruments.shown_turn(-190) == 190 and instruments.shown_turn(170) == 190
+
+
+def test_instruments_menu_uses_spanish_key_names(ctrl, qapp):
+    menu = ctrl.toolbar.build_instruments_menu()
+    texts = [a.text() for a in menu.actions()]
+    assert "Compás\tMayús+C" in texts

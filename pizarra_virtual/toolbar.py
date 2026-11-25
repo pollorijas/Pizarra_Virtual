@@ -47,7 +47,7 @@ QMenu::item:selected { background: #2f6fd1; }
 """
 
 BTN = 32
-INSTRUMENT_KEYS = {"ruler": "I", "protractor": "Y", "compass": "Shift+C"}
+INSTRUMENT_KEYS = {"ruler": "I", "protractor": "Y", "compass": "Mayús+C"}  # (texto de los menús)
 COL_WIDTH = 3 * BTN + 2 * 4
 # Modo táctil: además de los botones más grandes, letras, menús y deslizadores más cómodos para el dedo
 TOUCH_STYLE = """

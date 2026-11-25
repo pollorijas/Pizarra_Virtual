@@ -58,6 +58,11 @@ def shown_angle(deg: float) -> int:
     return int(round(-deg)) % 180
 
 
+def shown_turn(deg: float) -> int:
+    """Giro de un instrumento que no es simétrico (0°…359°, en sentido antihorario)."""
+    return int(round(-deg)) % 360
+
+
 def _wrap(deg: float) -> float:
     """Ángulo equivalente en (-180, 180]."""
     deg = math.fmod(deg, 360.0)
@@ -214,6 +219,16 @@ class Instrument:
     def release(self) -> None:
         self._drag = None
 
+    def cancel(self) -> None:
+        """Termina el arrastre devolviendo el instrumento a como estaba al empezarlo."""
+        d = self._drag
+        if d is not None:
+            self.x, self.y, self.angle = d["x"], d["y"], d["angle"]
+            for attr in ("radius", "measure"):
+                if attr in d:
+                    setattr(self, attr, d[attr])
+        self._drag = None
+
     @property
     def dragging(self) -> str | None:
         return self._drag["part"] if self._drag else None
@@ -333,7 +348,7 @@ class Ruler(Instrument):
         for part, c in self.knobs(k).items():
             _knob(p, c, KNOB * k, part)
         p.restore()
-        if self.dragging == "rotate" or abs(_wrap(self.angle)) > 0.01:
+        if self.dragging == "rotate" or shown_angle(self.angle) != 0:
             # Inclinación de la regla (al girarla o si no está horizontal)
             c = self.to_canvas(QPointF(0, W / 2 - KNOB * k - 6))
             _label(p, c, f"{shown_angle(self.angle)}°", 13 * k)
@@ -376,7 +391,7 @@ class Protractor(Instrument):
 
     def press(self, part: str, pos: QPointF) -> None:
         super().press(part, pos)
-        self._drag["radius"] = self.radius
+        self._drag.update(radius=self.radius, measure=self.measure)
 
     def drag(self, pos: QPointF, modifiers=Qt.KeyboardModifier.NoModifier) -> list[QPointF]:
         d = self._drag
@@ -390,7 +405,7 @@ class Protractor(Instrument):
             self.measure = float(max(0, min(180, round(deg))))
         elif d["part"] == "resize":
             r0 = max(1.0, _dist(d["from"], self.origin))
-            self.radius = max(90.0, min(1400.0, d["radius"] * _dist(pos, self.origin) / r0))
+            self.radius = max(60.0, min(1400.0, d["radius"] * _dist(pos, self.origin) / r0))
         else:
             return super().drag(pos, modifiers)
         return []
@@ -486,7 +501,7 @@ class Protractor(Instrument):
         pos = self.to_canvas(QPointF(R * 0.45 * math.cos(b), -R * 0.45 * math.sin(b)))
         _label(p, pos, f"{int(round(a))}°", max(14.0, R * 0.075) * min(k, 1.2))
         if self.dragging == "rotate":
-            _label(p, self.to_canvas(QPointF(0, self.base(k) + 22 * k)), f"{shown_angle(self.angle)}°", 13 * k)
+            _label(p, self.to_canvas(QPointF(0, self.base(k) + 22 * k)), f"{shown_turn(self.angle)}°", 13 * k)
 
 
 # ---------------------------------------------------------------------- compás
@@ -556,6 +571,8 @@ class Compass(Instrument):
         now = math.degrees(math.atan2(pos.y() - self.y, pos.x() - self.x))
         step = _wrap(now - d["prev"])
         d["prev"] = now
+        if _dist(pos, self.origin) < max(0.25 * self.radius, 12.0):
+            return []  # junto a la aguja el ángulo salta con cualquier temblor: no se cuenta
         start = d["sweep"]
         end = max(-360.0, min(360.0, start + step))
         d["sweep"] = end
@@ -649,13 +666,13 @@ KINDS = {"ruler": Ruler, "protractor": Protractor, "compass": Compass}
 def create(kind: str, center: QPointF, screen_w: float, screen_h: float, ppcm: float, k: float = 1.0) -> Instrument:
     """Instrumento nuevo, de un tamaño cómodo para la pantalla, centrado en ``center``."""
     if kind == "ruler":
-        cm = int(max(10, min(100, (0.6 * screen_w) // ppcm)))
+        cm = int(max(5, min(100, (0.6 * screen_w) // ppcm)))
         return Ruler(center.x(), center.y(), ppcm, cm, k)
     if kind == "protractor":
-        radius = max(140.0 * k, min(0.3 * min(screen_w, screen_h), 420.0))
+        radius = max(60.0, min(0.3 * min(screen_w, screen_h), 420.0))
         return Protractor(center.x(), center.y() + radius / 2, radius)
     if kind == "compass":
-        radius = max(5 * ppcm, 120.0)
+        radius = max(40.0, min(5 * ppcm, 0.3 * min(screen_w, screen_h)))  # 5 cm si caben
         return Compass(center.x() - radius / 2, center.y() + radius / 3, radius, ppcm)
     raise ValueError(kind)
 

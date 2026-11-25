@@ -58,6 +58,7 @@ TOUCH_TAP_MS = 500      # duración máxima de un toque con dos o tres dedos
 PALM_SIZE = 70          # px: un contacto más ancho es la palma (o el canto de la mano) → goma
 PALM_LATE_MS = 300      # hasta cuándo se acepta que el tamaño de la palma llegue tarde
 TOUCH_MOUSE_ECHO_MS = 400  # el ratón que Windows simula de un toque llega justo después de él
+COMPASS_PRESSURE = 1.0  # el compás dibuja con presión constante (trazo del grosor elegido)
 
 ZOOM_DEFAULT = 2.0
 ZOOM_MIN = 1.0
@@ -913,7 +914,8 @@ class Overlay(QWidget):
         inst = self.instruments.get(kind)
         if inst is None:
             center = self.to_canvas(QPointF(self.width() / 2, self.height() / 2))
-            inst = instruments.create(kind, center, self.width(), self.height(), self.px_per_cm(),
+            z = self.zoom_factor  # con zoom, del tamaño de lo que se ve
+            inst = instruments.create(kind, center, self.width() / z, self.height() / z, self.px_per_cm(),
                                       self.ctrl.touch_scale)
             self.instruments[kind] = inst
         self.update(self._view_rect(inst.bounds(self.ctrl.touch_scale)))
@@ -955,11 +957,7 @@ class Overlay(QWidget):
             return False
         inst, part = hit
         self.finish_current()
-        if part == "close":
-            self.hide_instrument(inst.kind)
-            self.ctrl.instruments_changed()
-            return True
-        # El instrumento pasa a estar delante de los demás
+        # El instrumento pasa a estar delante de los demás (el botón de cerrar actúa al soltar)
         self.instruments[inst.kind] = self.instruments.pop(inst.kind)
         pos = self.to_canvas(view)
         inst.press(part, pos)
@@ -969,7 +967,7 @@ class Overlay(QWidget):
             tool = c.tool if c.tool in GUIDED_TOOLS else Tool.BRUSH
             self._guided = True
             self._start_stroke(tool, c.color.getRgb(), float(c.size_for(tool)), c.opacity_for(tool) / 100.0,
-                               inst.pencil(), None, t)
+                               inst.pencil(), COMPASS_PRESSURE, t)
         self.update(self._view_rect(inst.bounds(self.ctrl.touch_scale)))
         return True
 
@@ -978,11 +976,26 @@ class Overlay(QWidget):
         old = inst.bounds(k)
         for q in inst.drag(self.to_canvas(view), modifiers):
             if self._stroke is not None:
-                self._add_point(q, None, t)
+                # Presión fija: el arco tiene el grosor elegido (la pluma no lo afina por la «velocidad»
+                # de los muchos puntos que llegan juntos)
+                self._add_point(q, COMPASS_PRESSURE, t)
         self.update(self._view_rect(old.united(inst.bounds(k))))
 
+    def _instrument_release(self, view: QPointF, t: int, modifiers) -> None:
+        inst = self._inst
+        if inst.dragging == "close":
+            hit = self.instrument_at(view)
+            self.finish_current()
+            if hit == (inst, "close"):  # se soltó sobre el mismo botón
+                self.hide_instrument(inst.kind)
+                self.ctrl.instruments_changed()
+            return
+        self._instrument_move(view, t, modifiers)
+        self.finish_current()
+
     def _paint_instruments(self, p: QPainter) -> None:
-        if not self.instruments:
+        # En «Ratón libre» se apartan con la hoja (no se podrían mover ni cerrar); vuelven al dibujar
+        if not self.instruments or not self.ctrl.sheet_visible:
             return
         p.save()
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -1204,6 +1217,10 @@ class Overlay(QWidget):
     def finish_current(self) -> None:
         """Confirma el trazo, figura o texto en curso y lo añade al historial."""
         if self._inst is not None:
+            if self._inst.dragging == "draw" and abs(self._inst.sweep) < 0.5 and self._stroke is not None:
+                # Clic en la punta del lápiz sin girarla: no queda un punto suelto en el dibujo
+                self._stroke = self._state = None
+                self._clear_layer()
             self._inst.release()
             self._inst = None
             self.update()
@@ -1288,7 +1305,7 @@ class Overlay(QWidget):
         editing_text = self._text is not None
         reopened = self._edit_uid is not None
         if self._inst is not None:
-            self._inst.release()
+            self._inst.cancel()  # vuelve a donde estaba (p. ej. al apoyar un segundo dedo o la palma)
             self._inst = None
         self._guide, self._guided = None, False
         self._stroke = None
@@ -1657,8 +1674,7 @@ class Overlay(QWidget):
         elif self._curtain_drag is not None:
             self._curtain_drag = None
         elif self._inst is not None:
-            self._instrument_move(view, t, modifiers)
-            self.finish_current()
+            self._instrument_release(view, t, modifiers)
         elif self._laser is not None:
             self._laser_release()
         else:
@@ -1756,8 +1772,7 @@ class Overlay(QWidget):
                 if self._curtain_drag is not None:
                     self._curtain_drag = None
                 elif self._inst is not None:
-                    self._instrument_move(view, e.timestamp(), e.modifiers())
-                    self.finish_current()
+                    self._instrument_release(view, e.timestamp(), e.modifiers())
                 elif self._laser is not None:
                     self._laser_release()
                 else:

@@ -15,7 +15,8 @@ detiene si falta.
 - **Regla, transportador y compás** (botón de la regla en la barra, teclas **I**, **Y** y
   **Mayús+C**). Se colocan encima de la pizarra, se mueven arrastrándolos, giran con su botón azul o
   con la rueda del ratón (los ángulos de 15° atraen; con Mayús el giro es libre) y se quitan con su
-  botón rojo. No forman parte del dibujo ni del historial.
+  botón rojo. No forman parte del dibujo ni del historial, y en «Ratón libre» se apartan con la
+  hoja.
   - **Regla** con escala en centímetros reales de la pantalla: un trazo que empieza junto a uno de
     sus bordes sale recto, pegado al borde.
   - **Transportador** de 180° con aguja para medir ángulos (el número grande indica los grados),
