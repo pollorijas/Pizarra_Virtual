@@ -9,7 +9,7 @@ incompatibles.
 Cada versión publicada debe tener su sección aquí: el flujo de publicación de GitHub Actions se
 detiene si falta.
 
-## [Sin publicar]
+## [1.5.3] - 2026-11-26
 
 ### Añadido
 - **Barra básica**: una versión más pequeña de la barra con lo más usado en clase (ocultar, modo,
